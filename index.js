@@ -38,7 +38,7 @@ try {
 /* CONFIGURATION */
 
 const e = process.env;
-const BRAND = "California Operations";
+const BRAND = "Texas Operations";
 
 const cfg = {
     token: e.DISCORD_TOKEN,
@@ -149,7 +149,7 @@ async function generateWindowsSpeech(text) {
 
     const audioPath = path.join(
         os.tmpdir(),
-        `california-speech-${Date.now()}-${Math.random().toString(36).slice(2)}.wav`
+        `Texas-speech-${Date.now()}-${Math.random().toString(36).slice(2)}.wav`
     );
 
     const encodedText = Buffer.from(spokenText, "utf8").toString("base64");
@@ -481,7 +481,7 @@ function welcomeMessage(member) {
             .setStyle(ButtonStyle.Secondary);
 
     return {
-        content: `${emoji ? `${emoji} ` : ""}Welcome ${member} to **California Operations**, you're our ${count} member!`,
+        content: `${emoji ? `${emoji} ` : ""}Welcome ${member} to **Texas Operations**, you're our ${count} member!`,
         components: [row(countButton, supportButton)],
         allowedMentions: { users: [member.id] }
     };
@@ -735,7 +735,7 @@ const ticketTypes = {
 
 function ticketPanel() {
     return makeV2(
-        "California Operations | Support Tickets",
+        "Texas Operations | Support Tickets",
         "Choose a department below to open a private ticket.\n\n" +
         "**General Support** — General questions and help.\n" +
         "**Report Tickets** — Report a player or incident.\n" +
@@ -932,7 +932,7 @@ async function makeTicketTranscript(channel, closingUser, reason) {
     messages.sort((a, b) => a.createdTimestamp - b.createdTimestamp);
 
     const lines = [
-        "CALIFORNIA OPERATIONS - TICKET TRANSCRIPT",
+        "Texas OPERATIONS - TICKET TRANSCRIPT",
         `Server: ${channel.guild.name} (${channel.guild.id})`,
         `Channel: #${channel.name} (${channel.id})`,
         `Closed by: ${closingUser.tag || closingUser.username} (${closingUser.id})`,
@@ -1634,7 +1634,7 @@ async function executeCommand(ctx, name, args = {}) {
     switch (name) {
         case "help": {
             const payload = makeV2(
-                "California Operations Commands",
+                "Texas Operations Commands",
                 "**Sessions:** `/session vote`, `/session start`, `/session shutdown`\n" +
                 "**Tickets:** `/ticketpanel`\n" +
                 "**Priority:** `/priority-panel`, `/priority`, `/endpriority`\n" +
@@ -1738,7 +1738,7 @@ async function executeCommand(ctx, name, args = {}) {
             if (!destination) return reply("Feedback channel is not configured.");
 
             await destination.send(makeV2(
-                "California Operations Feedback",
+                "Texas Operations Feedback",
                 `**From:** ${user.tag || user.username}\n` +
                 `**Rating:** ${get("rating", "integer")}/5\n` +
                 `**Feedback:** ${clean(get("message"))}`
@@ -2037,7 +2037,7 @@ async function executeCommand(ctx, name, args = {}) {
 
             try {
                 await target.send({
-                    content: `Message from California Operations staff:\n\n${message}`,
+                    content: `Message from Texas Operations staff:\n\n${message}`,
                     allowedMentions: { parse: [] }
                 });
 
@@ -2710,7 +2710,7 @@ app.get("/", (_req, res) => {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>California Operations</title>
+<title>Texas Operations</title>
 <style>
 body{margin:0;background:#111;color:#eee;font-family:Arial,sans-serif;display:grid;place-items:center;min-height:100vh}
 main{width:min(600px,85%);padding:28px;background:#191919;border:1px solid #333;border-radius:14px}
@@ -2720,7 +2720,7 @@ code{color:#fff}
 </head>
 <body>
 <main>
-<h1>California Operations</h1>
+<h1>Texas Operations</h1>
 <p>Discord bot status page.</p>
 <p>Status: <strong>${client.isReady() ? "Online" : "Starting"}</strong></p>
 <p>Health endpoint: <code>/health</code></p>
@@ -2776,11 +2776,11 @@ process.on("uncaughtException", error => {
 
 (async () => {
     try {
-        console.log("Starting California Operations...");
+        console.log("Starting Texas Operations...");
         await registerCommands();
         await client.login(cfg.token);
     } catch (error) {
-        console.error("Failed to start California Operations:", error);
+        console.error("Failed to start Texas Operations:", error);
         process.exitCode = 1;
     }
 })();
