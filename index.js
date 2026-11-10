@@ -6,17 +6,18 @@ const os = require("node:os");
 const path = require("node:path");
 const { execFile } = require("node:child_process");
 const { promisify } = require("node:util");
+
 const {
     Client,
     GatewayIntentBits,
     Partials,
-    Events,
-    REST,
-    Routes,
-    SlashCommandBuilder,
     PermissionFlagsBits,
     ChannelType,
-    EmbedBuilder,
+    MessageFlags,
+    ContainerBuilder,
+    TextDisplayBuilder,
+    SeparatorBuilder,
+    SeparatorSpacingSize,
     ActionRowBuilder,
     ButtonBuilder,
     ButtonStyle,
@@ -24,89 +25,100 @@ const {
     ModalBuilder,
     TextInputBuilder,
     TextInputStyle,
-    ContainerBuilder,
-    TextDisplayBuilder,
-    SeparatorBuilder,
+    SlashCommandBuilder,
+    REST,
+    Routes,
+    AttachmentBuilder,
     MediaGalleryBuilder,
-    MediaGalleryItemBuilder,
-    MessageFlags,
-    AttachmentBuilder
+    MediaGalleryItemBuilder
 } = require("discord.js");
+
 const {
     joinVoiceChannel,
     getVoiceConnection,
+    VoiceConnectionStatus,
+    entersState,
     createAudioPlayer,
     createAudioResource,
     AudioPlayerStatus,
-    VoiceConnectionStatus,
-    entersState,
+    NoSubscriberBehavior,
     StreamType
 } = require("@discordjs/voice");
 
-const e = process.env;
-const BRAND = "Texas Operations";
-const PREFIX = e.PREFIX || "$";
-const V2 = MessageFlags.IsComponentsV2;
-const EPHEMERAL = MessageFlags.Ephemeral;
 const execFileAsync = promisify(execFile);
 
+/* =========================================================
+   FFMPEG
+========================================================= */
+
+try {
+    const ffmpegPath = require("ffmpeg-static");
+
+    if (ffmpegPath) {
+        process.env.PATH =
+            `${path.dirname(ffmpegPath)}${path.delimiter}${process.env.PATH || ""}`;
+    }
+} catch (error) {
+    console.warn("Could not load ffmpeg-static:", error.message);
+}
+
+/* =========================================================
+   CONFIGURATION
+========================================================= */
+
+const e = process.env;
+const BRAND = "Texas Operations";
+
 const cfg = {
-    token: (e.DISCORD_TOKEN || e.BOT_TOKEN || "").trim().replace(/^Bot\s+/i, ""),
-    clientId: (e.CLIENT_ID || "").trim(),
-    guildId: (e.GUILD_ID || "").trim(),
+    token: e.DISCORD_TOKEN,
+    clientId: e.CLIENT_ID,
+    guildId: e.GUILD_ID,
+    prefix: e.PREFIX || "!",
 
-    port: Number(e.PORT || 10000),
-    prefix: PREFIX,
+    welcomeChannel: e.WELCOME_CHANNEL_ID,
+    welcomeEmoji: e.WELCOME_EMOJI || "",
 
-    ownerId: e.OWNER_ID || "",
-    staffRoleId: e.STAFF_ROLE_ID || "",
-    managementRoleId: e.MANAGEMENT_ROLE_ID || "",
-    adminRoleId: e.ADMIN_ROLE_ID || "",
-    priorityStaffRoleId: e.PRIORITY_STAFF_ROLE_ID || "",
+    logChannel: e.LOG_CHANNEL_ID,
+    staffLogChannel: e.STAFF_LOG_CHANNEL_ID,
 
-    welcomeChannel: e.WELCOME_CHANNEL_ID || "",
-    panelChannel: e.PANEL_CHANNEL_ID || "",
-    ticketCategory: e.TICKET_CATEGORY_ID || "",
-    ticketStaffRole: e.TICKET_STAFF_ROLE_ID || "",
-    ticketLogChannel: e.TICKET_LOG_CHANNEL_ID || "",
-    feedbackChannel: e.FEEDBACK_CHANNEL_ID || "",
-    applicationChannel: e.APPLICATION_CHANNEL_ID || "",
+    staffRole: e.STAFF_ROLE_ID,
+    adminRole: e.ADMIN_ROLE_ID,
 
-    sessionChannel: e.SESSION_CHANNEL_ID || "",
-    sessionLogChannel: e.SESSION_LOG_CHANNEL_ID || "",
+    supportRole: e.TICKET_SUPPORT_ROLE_ID,
+    iaRole: e.INTERNAL_AFFAIRS_ROLE_ID,
+    managementRole: e.MANAGEMENT_ROLE_ID,
+
+    generalCategory: e.GENERAL_SUPPORT_CATEGORY_ID || e.TICKET_CATEGORY_ID,
+    reportCategory: e.REPORT_TICKETS_CATEGORY_ID,
+    managementCategory: e.MANAGEMENT_SUPPORT_CATEGORY_ID,
+    iaCategory: e.INTERNAL_AFFAIRS_CATEGORY_ID,
+
+    panelChannel: e.TICKET_PANEL_CHANNEL_ID,
+    feedbackChannel: e.FEEDBACK_CHANNEL_ID,
+    applicationChannel: e.APPLICATION_RESULTS_CHANNEL_ID,
+
+    voiceChannel: e.VOICE_CHANNEL_ID,
+    sessionChannel: e.SESSION_VOTE_CHANNEL_ID,
+
+    serverName: e.SESSION_SERVER_NAME || BRAND,
+    serverCode: e.SESSION_SERVER_CODE || "CSRPVOS",
+    gameUrl: e.SESSION_GAME_URL || "",
+    requiredVotes: Math.max(1, Number(e.SESSION_REQUIRED_VOTES || 5)),
+
+    port: Number(e.PORT || 3000),
+
+    // Optional Components V2 banner images. Feature banners fall back to DEFAULT_BANNER_URL.
+    defaultBanner: e.DEFAULT_BANNER_URL || "",
     sessionBanner: e.SESSION_BANNER_URL || "",
-    sessionRequiredVotes: Number(e.SESSION_REQUIRED_VOTES || 4),
-
-    priorityPanelChannel: e.PRIORITY_PANEL_CHANNEL_ID || "",
-    priorityAnnouncementChannel: e.PRIORITY_ANNOUNCEMENT_CHANNEL_ID || "",
-    priorityLogChannel: e.PRIORITY_LOG_CHANNEL_ID || "",
-    priorityDurationMinutes: Number(e.PRIORITY_DURATION_MINUTES || 30),
     priorityBanner: e.PRIORITY_BANNER_URL || "",
-
-    generalLogChannel: e.GENERAL_LOG_CHANNEL_ID || "",
-    memberLogChannel: e.MEMBER_LOG_CHANNEL_ID || "",
-    moderationLogChannel: e.MODERATION_LOG_CHANNEL_ID || "",
-    messageLogChannel: e.MESSAGE_LOG_CHANNEL_ID || "",
-    roleLogChannel: e.ROLE_LOG_CHANNEL_ID || "",
-    channelLogChannel: e.CHANNEL_LOG_CHANNEL_ID || "",
-    voiceLogChannel: e.VOICE_LOG_CHANNEL_ID || "",
-    serverLogChannel: e.SERVER_LOG_CHANNEL_ID || "",
-    botLogChannel: e.BOT_LOG_CHANNEL_ID || "",
-
-    voiceChannel: e.VOICE_CHANNEL_ID || "",
-    voiceGuildId: e.VOICE_GUILD_ID || "",
-    voiceEnabled: String(e.VOICE_ENABLED || "false").toLowerCase() === "true",
-    voiceDisconnectRoleId: e.VOICE_DISCONNECT_ROLE_ID || "",
-
-    automatedBanner: e.AUTOMATED_BANNER_URL || "",
     ticketBanner: e.TICKET_BANNER_URL || "",
-    welcomeBanner: e.WELCOME_BANNER_URL || "",
-
-    requiredVotes: Number(e.REQUIRED_VOTES || 4)
+    staffBanner: e.STAFF_BANNER_URL || "",
+    moderationBanner: e.MODERATION_BANNER_URL || "",
+    automatedBanner: e.AUTOMATED_BANNER_URL || ""
 };
 
 if (!cfg.token || !cfg.clientId) {
-    console.error("ERROR: Add DISCORD_TOKEN (or BOT_TOKEN) and CLIENT_ID to your .env file.");
+    console.error("ERROR: Add DISCORD_TOKEN and CLIENT_ID to your .env file.");
     process.exit(1);
 }
 
@@ -115,144 +127,420 @@ const client = new Client({
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMembers,
         GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.GuildModeration,
         GatewayIntentBits.MessageContent,
-        GatewayIntentBits.GuildVoiceStates,
-        GatewayIntentBits.DirectMessages
+        GatewayIntentBits.GuildModeration,
+        GatewayIntentBits.GuildVoiceStates
     ],
     partials: [
-        Partials.Channel,
         Partials.Message,
-        Partials.User,
-        Partials.GuildMember
+        Partials.Channel,
+        Partials.User
     ]
 });
 
-const warnings = new Map();
 const tickets = new Map();
+const claims = new Map();
 const priorities = new Map();
-const priorityRequests = new Map();
-const priorityTimers = new Map();
+const warnings = new Map();
 const sessionVotes = new Map();
 const activeSessions = new Map();
-const ticketCounter = new Map();
-const voicePlayers = new Map();
-const voiceQueues = new Map();
 
-const ticketTypes = {
-    general: {
-        label: "General Support",
-        category: "general",
-        description: "Questions and general support"
-    },
-    report: {
-        label: "Report",
-        category: "report",
-        description: "Report a member or an incident"
-    },
-    management: {
-        label: "Management",
-        category: "management",
-        description: "Contact server management"
+const V2 = MessageFlags.IsComponentsV2;
+const EPHEMERAL = MessageFlags.Ephemeral;
+
+/* =========================================================
+   AUDIO PLAYER AND WINDOWS SPEECH
+========================================================= */
+
+const speechPlayer = createAudioPlayer({
+    behaviors: {
+        noSubscriber: NoSubscriberBehavior.Pause
     }
-};
+});
 
-const priorityScenes = [
-    { label: "Bank Robbery", value: "Bank Robbery" },
-    { label: "Jewelry Store Robbery", value: "Jewelry Store Robbery" },
-    { label: "Hostage Situation", value: "Hostage Situation" },
-    { label: "Store Robbery", value: "Store Robbery" },
-    { label: "Other Priority Scene", value: "Other Priority Scene" }
-];
+const speechQueue = [];
+let speechQueueRunning = false;
+let voiceJoinInProgress = false;
 
-function clean(value, max = 1000) {
-    if (value === null || value === undefined) return "Not provided";
-    return String(value)
-        .replace(/@everyone/gi, "@ everyone")
-        .replace(/@here/gi, "@ here")
-        .slice(0, max);
+speechPlayer.on("error", error => {
+    console.error("[VOICE] Audio player error:", error.message);
+});
+
+speechPlayer.on(AudioPlayerStatus.Playing, () => {
+    console.log("[VOICE] Announcement is now playing.");
+});
+
+speechPlayer.on(AudioPlayerStatus.Idle, () => {
+    console.log("[VOICE] Announcement playback finished.");
+});
+
+async function generateWindowsSpeech(text) {
+    const spokenText = String(text || "").trim();
+
+    if (!spokenText) {
+        throw new Error("The speech announcement is empty.");
+    }
+
+    if (process.platform !== "win32") {
+        throw new Error(
+            "Windows built-in speech requires the bot to run on Windows."
+        );
+    }
+
+    const audioPath = path.join(
+        os.tmpdir(),
+        `texas-speech-${Date.now()}-${Math.random().toString(36).slice(2)}.wav`
+    );
+
+    const encodedText = Buffer.from(spokenText, "utf8").toString("base64");
+    const encodedPath = Buffer.from(audioPath, "utf8").toString("base64");
+
+    const powershellScript = `
+$ErrorActionPreference = "Stop"
+Add-Type -AssemblyName System.Speech
+
+$text = [System.Text.Encoding]::UTF8.GetString(
+    [System.Convert]::FromBase64String("${encodedText}")
+)
+
+$outputPath = [System.Text.Encoding]::UTF8.GetString(
+    [System.Convert]::FromBase64String("${encodedPath}")
+)
+
+$synth = New-Object System.Speech.Synthesis.SpeechSynthesizer
+
+try {
+    $synth.Rate = 0
+    $synth.Volume = 100
+
+    $installedVoices = @(
+        $synth.GetInstalledVoices() |
+        Where-Object { $_.Enabled }
+    )
+
+    $preferredNames = @(
+        "Microsoft David Desktop",
+        "Microsoft Mark",
+        "Microsoft Guy Online",
+        "Microsoft Ryan Online"
+    )
+
+    $selectedVoice = $null
+
+    foreach ($preferredName in $preferredNames) {
+        $match = $installedVoices |
+            Where-Object { $_.VoiceInfo.Name -eq $preferredName } |
+            Select-Object -First 1
+
+        if ($match) {
+            $selectedVoice = $match
+            break
+        }
+    }
+
+    if (-not $selectedVoice) {
+        $selectedVoice = $installedVoices |
+            Where-Object { $_.VoiceInfo.Gender.ToString() -eq "Male" } |
+            Select-Object -First 1
+    }
+
+    if ($selectedVoice) {
+        $synth.SelectVoice($selectedVoice.VoiceInfo.Name)
+        Write-Output ("Selected voice: " + $selectedVoice.VoiceInfo.Name)
+    }
+    elseif ($installedVoices.Count -gt 0) {
+        $synth.SelectVoice($installedVoices[0].VoiceInfo.Name)
+        Write-Warning "No identifiable male voice was found; using the first installed voice."
+    }
+    else {
+        throw "No enabled Windows speech voices are installed."
+    }
+
+    $synth.SetOutputToWaveFile($outputPath)
+    $synth.Speak($text)
+}
+finally {
+    $synth.Dispose()
+}
+`;
+
+    const encodedScript = Buffer
+        .from(powershellScript, "utf16le")
+        .toString("base64");
+
+    console.log("[SPEECH] Generating Windows speech...");
+
+    try {
+        const result = await execFileAsync(
+            "powershell.exe",
+            [
+                "-NoProfile",
+                "-NonInteractive",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-EncodedCommand",
+                encodedScript
+            ],
+            {
+                windowsHide: true,
+                timeout: 60000,
+                maxBuffer: 1024 * 1024
+            }
+        );
+
+        if (result.stdout?.trim()) {
+            console.log("[SPEECH]", result.stdout.trim());
+        }
+
+        if (result.stderr?.trim()) {
+            console.warn("[SPEECH]", result.stderr.trim());
+        }
+
+        const file = await fs.stat(audioPath);
+
+        if (!file.size) {
+            throw new Error("Windows generated an empty audio file.");
+        }
+
+        return audioPath;
+    } catch (error) {
+        await fs.unlink(audioPath).catch(() => {});
+        throw new Error(`Windows speech generation failed: ${error.message}`);
+    }
 }
 
-function isStaff(member) {
-    if (!member) return false;
+function waitForPlayerIdle(player, timeoutMs = 120000) {
+    return new Promise((resolve, reject) => {
+        let settled = false;
 
-    if (cfg.ownerId && member.id === cfg.ownerId) return true;
+        const cleanup = () => {
+            clearTimeout(timer);
+            player.off(AudioPlayerStatus.Idle, onIdle);
+            player.off("error", onError);
+        };
 
-    return Boolean(
-        (cfg.staffRoleId && member.roles?.cache?.has(cfg.staffRoleId)) ||
-        (cfg.managementRoleId && member.roles?.cache?.has(cfg.managementRoleId)) ||
-        (cfg.adminRoleId && member.roles?.cache?.has(cfg.adminRoleId)) ||
-        member.permissions?.has(PermissionFlagsBits.Administrator)
-    );
+        const finish = error => {
+            if (settled) return;
+            settled = true;
+            cleanup();
+
+            if (error) reject(error);
+            else resolve();
+        };
+
+        const onIdle = () => finish();
+        const onError = error => finish(error);
+
+        const timer = setTimeout(
+            () => finish(new Error("Voice playback timed out.")),
+            timeoutMs
+        );
+
+        player.on(AudioPlayerStatus.Idle, onIdle);
+        player.on("error", onError);
+    });
 }
 
-function isManagement(member) {
-    if (!member) return false;
+async function playSpeech(text) {
+    if (!cfg.voiceChannel) {
+        throw new Error("VOICE_CHANNEL_ID is missing from .env.");
+    }
 
-    if (cfg.ownerId && member.id === cfg.ownerId) return true;
+    const channel = await client.channels
+        .fetch(cfg.voiceChannel)
+        .catch(() => null);
 
-    return Boolean(
-        (cfg.managementRoleId && member.roles?.cache?.has(cfg.managementRoleId)) ||
-        (cfg.adminRoleId && member.roles?.cache?.has(cfg.adminRoleId)) ||
-        member.permissions?.has(PermissionFlagsBits.Administrator)
-    );
+    if (!channel) {
+        throw new Error("The configured voice channel could not be found.");
+    }
+
+    if (
+        channel.type !== ChannelType.GuildVoice &&
+        channel.type !== ChannelType.GuildStageVoice
+    ) {
+        throw new Error("VOICE_CHANNEL_ID must be a voice or stage channel.");
+    }
+
+    let connection = getVoiceConnection(channel.guild.id);
+
+    if (
+        !connection ||
+        connection.joinConfig.channelId !== channel.id
+    ) {
+        await joinConfiguredVoiceChannel();
+        connection = getVoiceConnection(channel.guild.id);
+    }
+
+    if (!connection) {
+        throw new Error("The bot is not connected to its configured voice channel.");
+    }
+
+    await entersState(connection, VoiceConnectionStatus.Ready, 30000);
+
+    const me = await channel.guild.members.fetchMe();
+    const permissions = channel.permissionsFor(me);
+
+    if (!permissions?.has(PermissionFlagsBits.Connect)) {
+        throw new Error("The bot needs Connect permission in its voice channel.");
+    }
+
+    if (!permissions?.has(PermissionFlagsBits.Speak)) {
+        throw new Error("The bot needs Speak permission in its voice channel.");
+    }
+
+    connection.subscribe(speechPlayer);
+
+    const audioPath = await generateWindowsSpeech(text);
+
+    try {
+        if (speechPlayer.state.status !== AudioPlayerStatus.Idle) {
+            await waitForPlayerIdle(speechPlayer);
+        }
+
+        const resource = createAudioResource(audioPath, {
+            inputType: StreamType.Arbitrary
+        });
+
+        const playbackFinished = waitForPlayerIdle(speechPlayer);
+        speechPlayer.play(resource);
+
+        await playbackFinished;
+    } finally {
+        await fs.unlink(audioPath).catch(() => {});
+    }
 }
 
-function isPriorityStaff(member) {
-    if (!member) return false;
+async function processSpeechQueue() {
+    if (speechQueueRunning) return;
 
-    if (cfg.ownerId && member.id === cfg.ownerId) return true;
+    speechQueueRunning = true;
 
-    return Boolean(
-        (cfg.priorityStaffRoleId && member.roles?.cache?.has(cfg.priorityStaffRoleId)) ||
-        (cfg.managementRoleId && member.roles?.cache?.has(cfg.managementRoleId)) ||
-        (cfg.adminRoleId && member.roles?.cache?.has(cfg.adminRoleId)) ||
-        member.permissions?.has(PermissionFlagsBits.Administrator)
+    try {
+        while (speechQueue.length > 0) {
+            const item = speechQueue.shift();
+
+            try {
+                await playSpeech(item.text);
+                item.resolve?.();
+            } catch (error) {
+                console.error("[SPEECH] Announcement failed:", error.message);
+                item.reject?.(error);
+            }
+        }
+    } finally {
+        speechQueueRunning = false;
+
+        if (speechQueue.length > 0) {
+            void processSpeechQueue();
+        }
+    }
+}
+
+function speakInVoiceChannel(text) {
+    return new Promise((resolve, reject) => {
+        speechQueue.push({
+            text: String(text),
+            resolve,
+            reject
+        });
+
+        void processSpeechQueue();
+    });
+}
+
+/* =========================================================
+   GENERAL HELPERS
+========================================================= */
+
+function bannerForTitle(title) {
+    const name = String(title || "").toLowerCase();
+
+    if (/session|shutdown|vote/.test(name)) return cfg.sessionBanner || cfg.defaultBanner;
+    if (/priority/.test(name)) return cfg.priorityBanner || cfg.defaultBanner;
+    if (/ticket/.test(name)) return cfg.ticketBanner || cfg.defaultBanner;
+    if (/moderation|warning|warn|ban|kick|timeout|purge/.test(name)) return cfg.moderationBanner || cfg.defaultBanner;
+    if (/staff|promotion|infraction|application|feedback/.test(name)) return cfg.staffBanner || cfg.defaultBanner;
+    if (/log|welcome|automated|server/.test(name)) return cfg.automatedBanner || cfg.defaultBanner;
+
+    return cfg.defaultBanner;
+}
+
+function makeV2(title, body, rows = []) {
+    const container = new ContainerBuilder()
+        .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(`# ${title}`)
+        )
+        .addSeparatorComponents(
+            new SeparatorBuilder()
+                .setSpacing(SeparatorSpacingSize.Small)
+                .setDivider(true)
+        );
+
+    const bannerUrl = bannerForTitle(title);
+
+    if (bannerUrl) {
+        container.addMediaGalleryComponents(
+            new MediaGalleryBuilder().addItems(
+                new MediaGalleryItemBuilder().setURL(bannerUrl)
+            )
+        );
+    }
+
+    container.addTextDisplayComponents(
+        new TextDisplayBuilder().setContent(
+            body || "No additional information."
+        )
     );
+
+    for (const actionRow of rows) {
+        container.addActionRowComponents(actionRow);
+    }
+
+    return {
+        flags: V2,
+        components: [container],
+        allowedMentions: { parse: [] }
+    };
 }
 
 function row(...components) {
     return new ActionRowBuilder().addComponents(...components);
 }
 
-function makeV2(title, description, options = {}) {
-    const container = new ContainerBuilder();
+function button(id, label, style = ButtonStyle.Secondary) {
+    return new ButtonBuilder()
+        .setCustomId(id)
+        .setLabel(label)
+        .setStyle(style);
+}
 
-    if (options.color) {
-        container.setAccentColor(options.color);
-    } else {
-        container.setAccentColor(0x3498DB);
-    }
+function clean(value, max = 1000) {
+    return String(value ?? "")
+        .replace(/\u0000/g, "")
+        .trim()
+        .slice(0, max) || "Not provided";
+}
 
-    container.addTextDisplayComponents(
-        new TextDisplayBuilder().setContent(`# ${title}\n${description || ""}`)
+function isStaff(member) {
+    return Boolean(
+        member?.permissions?.has(PermissionFlagsBits.Administrator) ||
+        (cfg.staffRole && member?.roles?.cache?.has(cfg.staffRole)) ||
+        (cfg.adminRole && member?.roles?.cache?.has(cfg.adminRole)) ||
+        (cfg.managementRole && member?.roles?.cache?.has(cfg.managementRole))
     );
+}
 
-    if (options.banner) {
-        container.addMediaGalleryComponents(
-            new MediaGalleryBuilder().addItems(
-                new MediaGalleryItemBuilder().setURL(options.banner)
-            )
-        );
-    }
-
-    if (options.footer) {
-        container.addSeparatorComponents(new SeparatorBuilder());
-        container.addTextDisplayComponents(
-            new TextDisplayBuilder().setContent(`-# ${options.footer}`)
-        );
-    }
-
-    return {
-        components: [container],
-        flags: V2
-    };
+function channelById(guild, id) {
+    const channel = id && guild?.channels?.cache?.get(id);
+    return channel?.isTextBased() ? channel : null;
 }
 
 async function replyPrivate(interaction, content) {
-    const payload = typeof content === "string"
-        ? { content, flags: EPHEMERAL }
-        : { ...content, flags: (content.flags || 0) | EPHEMERAL };
+    const payload = {
+        content,
+        flags: EPHEMERAL,
+        allowedMentions: { parse: [] }
+    };
 
     if (interaction.replied || interaction.deferred) {
         return interaction.followUp(payload);
@@ -261,860 +549,873 @@ async function replyPrivate(interaction, content) {
     return interaction.reply(payload);
 }
 
-function channelById(guild, id) {
-    if (!guild || !id) return null;
+async function requireStaff(ctx) {
+    if (isStaff(ctx.member)) return true;
 
-    return guild.channels.cache.get(id) || null;
+    await replyPrivate(ctx, "You do not have permission to use this command.");
+    return false;
 }
 
-async function sendLog(guild, message, priority = false) {
-    if (!guild) return;
+async function sendLog(guild, content, staff = false) {
+    const channel = channelById(
+        guild,
+        staff
+            ? (cfg.staffLogChannel || cfg.logChannel)
+            : cfg.logChannel
+    );
 
-    const channelId = priority && cfg.priorityLogChannel
-        ? cfg.priorityLogChannel
-        : cfg.generalLogChannel;
+    if (!channel) return;
 
-    if (!channelId) return;
-
-    const channel = channelById(guild, channelId);
-    if (!channel || !channel.isTextBased()) return;
-
-    await channel.send({
-        content: clean(message, 1900),
-        allowedMentions: { parse: [] }
-    }).catch(error => {
-        console.error("Could not send log:", error.message);
-    });
+    await channel.send(
+        makeV2(staff ? "Staff Log" : "Server Log", content)
+    ).catch(console.error);
 }
 
-async function sendNamedLog(guild, channelId, message) {
-    if (!guild || !channelId) return;
 
-    const channel = channelById(guild, channelId);
-    if (!channel || !channel.isTextBased()) return;
 
-    await channel.send({
-        content: clean(message, 1900),
-        allowedMentions: { parse: [] }
-    }).catch(error => {
-        console.error("Could not send log:", error.message);
-    });
-}
+/* =========================================================
+   WELCOME MESSAGE — PLAIN TEXT, NOT AN EMBED
+========================================================= */
 
 function welcomeMessage(member) {
-    const container = new ContainerBuilder()
-        .setAccentColor(0x3498DB)
-        .addTextDisplayComponents(
-            new TextDisplayBuilder().setContent(
-                `# Welcome to ${BRAND}\n` +
-                `Welcome ${member}!\n\n` +
-                `Please read the server information and follow all community rules.`
-            )
-        );
+    const count = member.guild.memberCount;
+    const emoji = cfg.welcomeEmoji?.trim() || "";
 
-    if (cfg.welcomeBanner) {
-        container.addMediaGalleryComponents(
-            new MediaGalleryBuilder().addItems(
-                new MediaGalleryItemBuilder().setURL(cfg.welcomeBanner)
+
+const greeting =
+    `Welcome ${member} to **Texas Operations**, you're our ${count} member!`;
+
+
+    const countButton = new ButtonBuilder()
+        .setCustomId("welcome:membercount")
+        .setLabel(`Members: ${count}`)
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(true);
+
+    const supportButton = cfg.panelChannel
+        ? new ButtonBuilder()
+            .setLabel("Support")
+            .setStyle(ButtonStyle.Link)
+            .setURL(
+                `https://discord.com/channels/${member.guild.id}/${cfg.panelChannel}`
             )
-        );
-    }
+        : new ButtonBuilder()
+            .setCustomId("welcome:support")
+            .setLabel("Support")
+            .setStyle(ButtonStyle.Secondary);
 
     return {
-        components: [container],
-        flags: V2
+        content: `${emoji ? `${emoji} ` : ""}${greeting}`,
+        components: [
+            row(countButton, supportButton)
+        ],
+        allowedMentions: {
+            users: [member.id]
+        }
     };
 }
 
-function ticketPanel() {
-    const menu = new StringSelectMenuBuilder()
-        .setCustomId("ticket:create")
-        .setPlaceholder("Select a ticket category")
-        .addOptions(
-            {
-                label: "General Support",
-                value: "general",
-                description: "Questions and general support"
-            },
-            {
-                label: "Report",
-                value: "report",
-                description: "Report a member or incident"
-            },
-            {
-                label: "Management",
-                value: "management",
-                description: "Contact server management"
+function ordinal(number) {
+    const remainder100 = number % 100;
+
+    if (remainder100 >= 11 && remainder100 <= 13) {
+        return `${number}th`;
+    }
+
+    switch (number % 10) {
+        case 1: return `${number}st`;
+        case 2: return `${number}nd`;
+        case 3: return `${number}rd`;
+        default: return `${number}th`;
+    }
+}
+
+
+/* =========================================================
+   VOICE CONNECTION
+========================================================= */
+
+async function joinConfiguredVoiceChannel() {
+    if (voiceJoinInProgress) {
+        return getVoiceConnection(cfg.guildId);
+    }
+
+    if (!cfg.voiceChannel) {
+        console.warn("VOICE_CHANNEL_ID is not configured.");
+        return;
+    }
+
+    voiceJoinInProgress = true;
+
+    try {
+        const channel = await client.channels
+            .fetch(cfg.voiceChannel)
+            .catch(() => null);
+
+        if (!channel) {
+            console.error("Voice channel not found. Check VOICE_CHANNEL_ID.");
+            return;
+        }
+
+        if (
+            channel.type !== ChannelType.GuildVoice &&
+            channel.type !== ChannelType.GuildStageVoice
+        ) {
+            console.error("VOICE_CHANNEL_ID must be a voice or stage channel.");
+            return;
+        }
+
+        const guild = channel.guild;
+        const me = await guild.members.fetchMe();
+        const permissions = channel.permissionsFor(me);
+
+        if (!permissions?.has(PermissionFlagsBits.Connect)) {
+            console.error("Bot is missing Connect permission in voice.");
+            return;
+        }
+
+        if (!permissions?.has(PermissionFlagsBits.Speak)) {
+            console.error("Bot is missing Speak permission in voice.");
+        }
+
+        let connection = getVoiceConnection(guild.id);
+
+        if (
+            connection &&
+            connection.joinConfig.channelId === channel.id &&
+            connection.state.status === VoiceConnectionStatus.Ready
+        ) {
+            connection.subscribe(speechPlayer);
+            return connection;
+        }
+
+        if (connection) {
+            connection.destroy();
+        }
+
+        connection = joinVoiceChannel({
+            channelId: channel.id,
+            guildId: guild.id,
+            adapterCreator: guild.voiceAdapterCreator,
+            selfDeaf: false,
+            selfMute: false
+        });
+
+        connection.on("error", error => {
+            console.error("Voice connection error:", error.message);
+        });
+
+        connection.on(VoiceConnectionStatus.Disconnected, async () => {
+            try {
+                await Promise.race([
+                    entersState(connection, VoiceConnectionStatus.Connecting, 5000),
+                    entersState(connection, VoiceConnectionStatus.Signalling, 5000)
+                ]);
+            } catch {
+                try {
+                    connection.destroy();
+                } catch {}
+
+                setTimeout(() => {
+                    joinConfiguredVoiceChannel().catch(console.error);
+                }, 5000);
             }
-        );
+        });
 
-    const container = new ContainerBuilder()
-        .setAccentColor(0x3498DB)
-        .addTextDisplayComponents(
-            new TextDisplayBuilder().setContent(
-                `# ${BRAND} Support\n` +
-                "Select the appropriate category below to open a support ticket.\n\n" +
-                "**General Support** — General questions and assistance.\n" +
-                "**Report** — Report a member or incident.\n" +
-                "**Management** — Contact the management team."
-            )
-        )
-        .addSeparatorComponents(new SeparatorBuilder())
-        .addActionRowComponents(row(menu));
+        await entersState(connection, VoiceConnectionStatus.Ready, 30000);
+        connection.subscribe(speechPlayer);
 
-    if (cfg.ticketBanner) {
-        container.addMediaGalleryComponents(
-            new MediaGalleryBuilder().addItems(
-                new MediaGalleryItemBuilder().setURL(cfg.ticketBanner)
-            )
-        );
+        console.log(`Joined voice channel: ${channel.name}`);
+        console.log("Voice audio player subscribed.");
+
+        return connection;
+    } catch (error) {
+        console.error("Voice connection failed:", error.message);
+    } finally {
+        voiceJoinInProgress = false;
     }
-
-    return {
-        components: [container],
-        flags: V2
-    };
 }
 
-function priorityPublicPanel() {
-    const button = new ButtonBuilder()
-        .setCustomId("priority:request")
-        .setLabel("Request Priority")
-        .setStyle(ButtonStyle.Primary);
+/* =========================================================
+   SESSION SYSTEM
+========================================================= */
 
-    const container = new ContainerBuilder()
-        .setAccentColor(0xE67E22)
-        .addTextDisplayComponents(
-            new TextDisplayBuilder().setContent(
-                "# Priority Scene Request\n" +
-                "Use the button below to request a priority scene.\n\n" +
-                "Examples include bank robberies, jewelry store robberies, and hostage situations.\n\n" +
-                "A member of the authorized staff team will review your request."
-            )
-        )
-        .addSeparatorComponents(new SeparatorBuilder())
-        .addActionRowComponents(row(button));
-
-    if (cfg.priorityBanner) {
-        container.addMediaGalleryComponents(
-            new MediaGalleryBuilder().addItems(
-                new MediaGalleryItemBuilder().setURL(cfg.priorityBanner)
-            )
-        );
-    }
-
-    return {
-        components: [container],
-        flags: V2
-    };
+function sessionInfo() {
+    return [
+        `**Server Name:** ${cfg.serverName}`,
+        `**Server Code:** ${cfg.serverCode}`,
+        `**Server Link:** ${cfg.gameUrl || "Not configured"}`
+    ].join("\n");
 }
 
-function priorityPanel() {
-    const menu = new StringSelectMenuBuilder()
-        .setCustomId("priority:choose")
-        .setPlaceholder("Select a priority scene")
-        .addOptions(priorityScenes);
+function sessionAnnouncement(title, description, quickJoin = false) {
+    const rows = [];
 
-    const container = new ContainerBuilder()
-        .setAccentColor(0xE67E22)
-        .addTextDisplayComponents(
-            new TextDisplayBuilder().setContent(
-                "# Priority Management\n" +
-                "Authorized staff can start a priority scene using the selector below.\n\n" +
-                "Starting a priority will announce the scene and start its timer."
-            )
-        )
-        .addSeparatorComponents(new SeparatorBuilder())
-        .addActionRowComponents(row(menu));
-
-    if (cfg.priorityBanner) {
-        container.addMediaGalleryComponents(
-            new MediaGalleryBuilder().addItems(
-                new MediaGalleryItemBuilder().setURL(cfg.priorityBanner)
-            )
-        );
+    if (quickJoin && cfg.gameUrl) {
+        rows.push(row(
+            new ButtonBuilder()
+                .setLabel("Quick Join")
+                .setStyle(ButtonStyle.Link)
+                .setURL(cfg.gameUrl)
+        ));
     }
 
-    return {
-        components: [container],
-        flags: V2
-    };
+    return makeV2(
+        title,
+        `${description}\n\n## Server Information\n${sessionInfo()}`,
+        rows
+    );
+}
+
+function voteCounts(guildId) {
+    const state = sessionVotes.get(guildId);
+    let yes = 0;
+    let no = 0;
+
+    if (state) {
+        for (const vote of state.votes.values()) {
+            if (vote === "yes") yes++;
+            if (vote === "no") no++;
+        }
+    }
+
+    return { yes, no };
 }
 
 function votePanel(state) {
-    const yes = new ButtonBuilder()
-        .setCustomId("session:yes")
-        .setLabel("Yes")
-        .setStyle(ButtonStyle.Success);
+    const counts = voteCounts(state.guildId);
 
-    const no = new ButtonBuilder()
-        .setCustomId("session:no")
-        .setLabel("No")
-        .setStyle(ButtonStyle.Danger);
-
-    const yesVotes = [...state.votes.values()].filter(vote => vote === "yes").length;
-    const noVotes = [...state.votes.values()].filter(vote => vote === "no").length;
-
-    const container = new ContainerBuilder()
-        .setAccentColor(0x3498DB)
-        .addTextDisplayComponents(
-            new TextDisplayBuilder().setContent(
-                "# Session Vote\n" +
-                "A session vote is currently active.\n\n" +
-                `**Required yes votes:** ${state.required}\n` +
-                `**Yes votes:** ${yesVotes}\n` +
-                `**No votes:** ${noVotes}\n\n` +
-                "Select a button below to cast or change your vote."
-            )
-        )
-        .addSeparatorComponents(new SeparatorBuilder())
-        .addActionRowComponents(row(yes, no));
-
-    if (cfg.sessionBanner) {
-        container.addMediaGalleryComponents(
-            new MediaGalleryBuilder().addItems(
-                new MediaGalleryItemBuilder().setURL(cfg.sessionBanner)
-            )
-        );
-    }
-
-    return {
-        components: [container],
-        flags: V2
-    };
+    return makeV2(
+        "Session Vote",
+        `A session vote has started for **${cfg.serverName}**.\n\n` +
+        `Vote below if you want a session to begin.\n\n` +
+        `**Required yes votes:** ${state.required}\n` +
+        `**Yes votes:** ${counts.yes}\n` +
+        `**No votes:** ${counts.no}\n\n${sessionInfo()}`,
+        [row(
+            button("session:yes", "Vote Yes", ButtonStyle.Success),
+            button("session:no", "Vote No", ButtonStyle.Danger)
+        )]
+    );
 }
 
 async function refreshVote(guildId) {
     const state = sessionVotes.get(guildId);
-    if (!state || !state.channelId || !state.messageId) return;
+    if (!state) return;
 
-    const guild = client.guilds.cache.get(guildId);
-    if (!guild) return;
+    const channel = await client.channels
+        .fetch(state.channelId)
+        .catch(() => null);
 
-    const channel = channelById(guild, state.channelId);
-    if (!channel || !channel.isTextBased()) return;
+    if (!channel?.isTextBased()) return;
 
-    const message = await channel.messages.fetch(state.messageId).catch(() => null);
-    if (!message) return;
+    const message = await channel.messages
+        .fetch(state.messageId)
+        .catch(() => null);
 
-    await message.edit(votePanel(state)).catch(error => {
-        console.error("Could not update session vote:", error.message);
-    });
+    if (message) {
+        await message.edit(votePanel(state)).catch(console.error);
+    }
 
-    const yesVotes = [...state.votes.values()].filter(vote => vote === "yes").length;
+    const counts = voteCounts(guildId);
 
-    if (!state.passed && yesVotes >= state.required) {
+    if (counts.yes >= state.required && !state.passed) {
         state.passed = true;
 
-        await channel.send(makeV2(
+        await channel.send(sessionAnnouncement(
             "Session Vote Passed",
-            `The session vote has passed with **${yesVotes} yes votes**.`
-        ));
+            `The vote reached ${counts.yes}/${state.required} yes votes. Staff can now start the session.`,
+            true
+        )).catch(console.error);
 
-        await sendNamedLog(
-            guild,
-            cfg.sessionLogChannel,
-            `Session vote passed in ${channel}. Yes votes: ${yesVotes}. Required: ${state.required}.`
+        await sendLog(
+            channel.guild,
+            `Session vote passed with ${counts.yes}/${state.required} yes votes.`,
+            true
         );
     }
 }
 
 async function startSession(guild, user) {
-    const channel = channelById(guild, cfg.sessionChannel);
-    if (!channel) {
-        throw new Error("Session announcement channel is not configured.");
-    }
+    const channel = cfg.sessionChannel
+        ? channelById(guild, cfg.sessionChannel)
+        : null;
 
-    const container = new ContainerBuilder()
-        .setAccentColor(0x2ECC71)
-        .addTextDisplayComponents(
-            new TextDisplayBuilder().setContent(
-                `# ${BRAND} Session Started\n` +
-                "The roleplay session is now open.\n\n" +
-                `**Host:** ${user}\n` +
-                `**Started:** <t:${Math.floor(Date.now() / 1000)}:F>`
-            )
-        );
+    const destination = channel || guild.systemChannel;
 
-    if (cfg.sessionBanner) {
-        container.addMediaGalleryComponents(
-            new MediaGalleryBuilder().addItems(
-                new MediaGalleryItemBuilder().setURL(cfg.sessionBanner)
-            )
+    if (!destination) {
+        throw new Error(
+            "Configure SESSION_VOTE_CHANNEL_ID or set a system channel."
         );
     }
-
-    const message = await channel.send({
-        components: [container],
-        flags: V2
-    });
 
     activeSessions.set(guild.id, {
-        hostId: user.id,
         startedAt: Date.now(),
-        channelId: channel.id,
-        messageId: message.id
+        startedBy: user.id
     });
 
-    await sendNamedLog(
+    await destination.send(sessionAnnouncement(
+        "Sessions",
+        "Join Texas Operations! We're the best **Texas Operations** server!",
+        true
+    ));
+
+    const oldVote = sessionVotes.get(guild.id);
+    sessionVotes.delete(guild.id);
+
+    if (oldVote) {
+        const voteChannel = await client.channels
+            .fetch(oldVote.channelId)
+            .catch(() => null);
+
+        if (voteChannel?.isTextBased()) {
+            await voteChannel.send(makeV2(
+                "Session Vote Ended",
+                `A staff member started the session.\n\n${sessionInfo()}`
+            )).catch(() => {});
+        }
+    }
+
+    await sendLog(
         guild,
-        cfg.sessionLogChannel,
-        `Session started by ${user.tag || user.username}.`
+        `Session started by ${user.tag || user.username}.`,
+        true
     );
 }
 
 async function shutdownSession(guild, user) {
-    const channel = channelById(guild, cfg.sessionChannel);
-    if (!channel) {
-        throw new Error("Session announcement channel is not configured.");
-    }
-
-    const session = activeSessions.get(guild.id);
-
-    const container = new ContainerBuilder()
-        .setAccentColor(0xE74C3C)
-        .addTextDisplayComponents(
-            new TextDisplayBuilder().setContent(
-                `# ${BRAND} Session Ended\n` +
-                "The roleplay session has been shut down.\n\n" +
-                `**Ended by:** ${user}\n` +
-                `**Ended:** <t:${Math.floor(Date.now() / 1000)}:F>` +
-                (session
-                    ? `\n**Session duration:** ${Math.floor((Date.now() - session.startedAt) / 60000)} minutes`
-                    : "")
-            )
-        );
-
-    if (cfg.sessionBanner) {
-        container.addMediaGalleryComponents(
-            new MediaGalleryBuilder().addItems(
-                new MediaGalleryItemBuilder().setURL(cfg.sessionBanner)
-            )
-        );
-    }
-
-    await channel.send({
-        components: [container],
-        flags: V2
-    });
-
     activeSessions.delete(guild.id);
+    sessionVotes.delete(guild.id);
 
-    await sendNamedLog(
+    const channel = cfg.sessionChannel
+        ? channelById(guild, cfg.sessionChannel)
+        : null;
+
+    const destination = channel || guild.systemChannel;
+
+    if (!destination) {
+        throw new Error(
+            "Configure SESSION_VOTE_CHANNEL_ID or set a system channel."
+        );
+    }
+
+    await destination.send(sessionAnnouncement(
+        "Session Shutdown",
+        "The session is now closed. Thank you to everyone who attended."
+    ));
+
+    await sendLog(
         guild,
-        cfg.sessionLogChannel,
-        `Session shut down by ${user.tag || user.username}.`
+        `Session shutdown by ${user.tag || user.username}.`,
+        true
     );
 }
 
-async function createTicket(interaction, type, inquiry) {
-    const info = ticketTypes[type];
-    if (!info) {
-        return replyPrivate(interaction, "Invalid ticket category.");
+/* =========================================================
+   TICKETS AND TRANSCRIPTS
+========================================================= */
+
+/* =========================================================
+   TICKETS AND TRANSCRIPTS
+========================================================= */
+
+const ticketTypes = {
+    general: {
+        label: "General Support",
+        prefix: "general",
+        category: () => cfg.generalCategory,
+        role: () => cfg.supportRole || cfg.staffRole
+    },
+
+    report: {
+        label: "Report Tickets",
+        prefix: "report",
+        category: () => cfg.reportCategory,
+        role: () => cfg.staffRole
+    },
+
+    management: {
+        label: "Management Support",
+        prefix: "management",
+        category: () => cfg.managementCategory,
+        role: () => cfg.managementRole || cfg.adminRole
+    }
+};
+
+function ticketPanel() {
+    return makeV2(
+        "Texas Operations | Support Tickets",
+        "Choose a department below to open a private ticket.\n\n" +
+        "**General Support** — General questions and help.\n" +
+        "**Report Tickets** — Report a player or incident.\n" +
+        "**Management Support** — Management matters.",
+        [row(
+            new StringSelectMenuBuilder()
+                .setCustomId("ticket:create")
+                .setPlaceholder("Choose a ticket category")
+                .addOptions(
+                    {
+                        label: "General Support",
+                        value: "general"
+                    },
+                    {
+                        label: "Report Tickets",
+                        value: "report"
+                    },
+                    {
+                        label: "Management Support",
+                        value: "management"
+                    }
+                )
+        )]
+    );
+}
+
+function ticketChannelName(prefix, username) {
+    const safeName = String(username)
+        .toLowerCase()
+        .replace(/[^a-z0-9-]/g, "-")
+        .replace(/-+/g, "-")
+        .replace(/^-|-$/g, "") || "user";
+
+    return `${prefix}-${safeName}`.slice(0, 100);
+}
+
+function findTicketKey(guildId, channelId) {
+    for (const [key, id] of tickets) {
+        if (key.startsWith(`${guildId}:`) && id === channelId) {
+            return key;
+        }
     }
 
+    const channel = client.channels.cache.get(channelId);
+
+    if (channel?.topic?.startsWith("texas-ticket:")) {
+        const parts = channel.topic.split(":");
+
+        if (parts.length >= 4 && parts[1] === guildId) {
+            return `${parts[1]}:${parts[2]}:${parts[3]}`;
+        }
+    }
+
+    return null;
+}
+
+async function createTicket(interaction, type) {
     const guild = interaction.guild;
-    if (!guild) {
-        return replyPrivate(interaction, "Tickets can only be opened in a server.");
+    const user = interaction.user;
+    const info = ticketTypes[type];
+
+    if (!info) {
+        return replyPrivate(interaction, "Unknown ticket type.");
+    }
+
+    const key = `${guild.id}:${user.id}:${type}`;
+    const oldId = tickets.get(key);
+    const oldChannel = oldId
+        ? guild.channels.cache.get(oldId)
+        : null;
+
+    if (oldChannel) {
+        return replyPrivate(interaction, `You already have a ticket: ${oldChannel}`);
     }
 
     const existing = guild.channels.cache.find(channel =>
-        channel.type === ChannelType.GuildText &&
-        channel.topic?.includes(`ticket-owner:${interaction.user.id}`)
+        channel.topic === `texas-ticket:${guild.id}:${user.id}:${type}`
     );
 
     if (existing) {
+        tickets.set(key, existing.id);
+        return replyPrivate(interaction, `You already have a ticket: ${existing}`);
+    }
+
+    const categoryId = info.category();
+
+    if (!categoryId || !guild.channels.cache.has(categoryId)) {
         return replyPrivate(
             interaction,
-            `You already have an open ticket: ${existing}`
+            `The ${info.label} category ID is missing or invalid in .env.`
         );
     }
 
-    const counter = (ticketCounter.get(guild.id) || 0) + 1;
-    ticketCounter.set(guild.id, counter);
-
-    const safeName = interaction.user.username
-        .toLowerCase()
-        .replace(/[^a-z0-9-]/g, "")
-        .slice(0, 18) || "member";
-
-    const channel = await guild.channels.create({
-        name: `${type}-${safeName}-${counter}`,
-        type: ChannelType.GuildText,
-        parent: cfg.ticketCategory || null,
-        topic: `ticket-owner:${interaction.user.id}; ticket-type:${type}`,
-        permissionOverwrites: [
-            {
-                id: guild.roles.everyone.id,
-                deny: [PermissionFlagsBits.ViewChannel]
-            },
-            {
-                id: interaction.user.id,
-                allow: [
-                    PermissionFlagsBits.ViewChannel,
-                    PermissionFlagsBits.SendMessages,
-                    PermissionFlagsBits.ReadMessageHistory,
-                    PermissionFlagsBits.AttachFiles
-                ]
-            },
-            ...(cfg.ticketStaffRole
-                ? [{
-                    id: cfg.ticketStaffRole,
-                    allow: [
-                        PermissionFlagsBits.ViewChannel,
-                        PermissionFlagsBits.SendMessages,
-                        PermissionFlagsBits.ReadMessageHistory,
-                        PermissionFlagsBits.ManageMessages
-                    ]
-                }]
-                : [])
-        ]
-    });
-
-    tickets.set(channel.id, {
-        ownerId: interaction.user.id,
-        type,
-        createdAt: Date.now(),
-        claimedBy: null
-    });
-
-    const claim = new ButtonBuilder()
-        .setCustomId("ticket:claim")
-        .setLabel("Claim Ticket")
-        .setStyle(ButtonStyle.Primary);
-
-    const close = new ButtonBuilder()
-        .setCustomId("ticket:close")
-        .setLabel("Close Ticket")
-        .setStyle(ButtonStyle.Danger);
-
-    const container = new ContainerBuilder()
-        .setAccentColor(0x3498DB)
-        .addTextDisplayComponents(
-            new TextDisplayBuilder().setContent(
-                `# ${info.label}\n` +
-                `Hello ${interaction.user}, your ticket has been created.\n\n` +
-                `**Category:** ${info.label}\n` +
-                `**Inquiry:** ${inquiry}\n\n` +
-                "A staff member will assist you as soon as possible."
-            )
-        )
-        .addSeparatorComponents(new SeparatorBuilder())
-        .addActionRowComponents(row(claim, close));
-
-    if (cfg.ticketBanner) {
-        container.addMediaGalleryComponents(
-            new MediaGalleryBuilder().addItems(
-                new MediaGalleryItemBuilder().setURL(cfg.ticketBanner)
-            )
-        );
-    }
-
-    await channel.send({
-        content: cfg.ticketStaffRole ? `<@&${cfg.ticketStaffRole}>` : "",
-        components: [container],
-        flags: V2,
-        allowedMentions: {
-            roles: cfg.ticketStaffRole ? [cfg.ticketStaffRole] : []
+    const overwrites = [
+        {
+            id: guild.roles.everyone.id,
+            deny: [PermissionFlagsBits.ViewChannel]
+        },
+        {
+            id: user.id,
+            allow: [
+                PermissionFlagsBits.ViewChannel,
+                PermissionFlagsBits.SendMessages,
+                PermissionFlagsBits.ReadMessageHistory,
+                PermissionFlagsBits.AttachFiles
+            ]
+        },
+        {
+            id: client.user.id,
+            allow: [
+                PermissionFlagsBits.ViewChannel,
+                PermissionFlagsBits.SendMessages,
+                PermissionFlagsBits.ReadMessageHistory,
+                PermissionFlagsBits.ManageChannels,
+                PermissionFlagsBits.AttachFiles
+            ]
         }
-    });
+    ];
 
-    await sendNamedLog(
-        guild,
-        cfg.ticketLogChannel,
-        `Ticket created: ${channel} by ${interaction.user.tag}. Category: ${info.label}.`
-    );
+    const staffRole = info.role();
 
-    return replyPrivate(
-        interaction,
-        `Your ticket has been created: ${channel}`
-    );
+    if (staffRole && guild.roles.cache.has(staffRole)) {
+        overwrites.push({
+            id: staffRole,
+            allow: [
+                PermissionFlagsBits.ViewChannel,
+                PermissionFlagsBits.SendMessages,
+                PermissionFlagsBits.ReadMessageHistory,
+                PermissionFlagsBits.AttachFiles
+            ]
+        });
+    }
+
+    try {
+        const channel = await guild.channels.create({
+            name: ticketChannelName(info.prefix, user.username),
+            type: ChannelType.GuildText,
+            parent: categoryId,
+            topic: `texas-ticket:${guild.id}:${user.id}:${type}`,
+            permissionOverwrites: overwrites,
+            reason: `${info.label} ticket opened by ${user.tag}`
+        });
+
+        tickets.set(key, channel.id);
+
+        await channel.send(makeV2(
+            info.label,
+            `Welcome ${user}!\n\n` +
+            "Please explain your request and include any relevant details.\n\n" +
+            `**Opened by:** ${user.tag}\n` +
+            `**Department:** ${info.label}`,
+            [row(
+                button("ticket:claim", "Claim Ticket"),
+                button("ticket:close", "Close Ticket", ButtonStyle.Danger)
+            )]
+        ));
+
+        await replyPrivate(interaction, `Your ticket has been created: ${channel}`);
+
+        await sendLog(
+            guild,
+            `Ticket created: ${channel}\n` +
+            `Department: ${info.label}\n` +
+            `Opened by: ${user.tag} (${user.id})`,
+            true
+        );
+    } catch (error) {
+        console.error("Ticket creation failed:", error);
+
+        await replyPrivate(
+            interaction,
+            "Ticket creation failed. Check the category ID and the bot's Manage Channels permission."
+        );
+    }
 }
 
 async function claimTicket(interaction) {
-    const channel = interaction.channel;
-    const ticket = tickets.get(channel.id);
-
-    if (!ticket) {
-        return replyPrivate(interaction, "This channel is not an active ticket.");
-    }
-
     if (!isStaff(interaction.member)) {
-        return replyPrivate(interaction, "Only staff members can claim tickets.");
+        return replyPrivate(interaction, "Only staff can claim tickets.");
     }
 
-    if (ticket.claimedBy) {
-        return replyPrivate(
-            interaction,
-            `This ticket has already been claimed by <@${ticket.claimedBy}>.`
-        );
+    if (!findTicketKey(interaction.guildId, interaction.channelId)) {
+        return replyPrivate(interaction, "This is not a recognized ticket channel.");
     }
 
-    ticket.claimedBy = interaction.user.id;
+    claims.set(interaction.channelId, interaction.user.id);
 
-    await channel.send({
-        content: `This ticket has been claimed by ${interaction.user}.`,
-        allowedMentions: { users: [interaction.user.id] }
-    });
+    await interaction.channel.send(makeV2(
+        "Ticket Claimed",
+        `This ticket is now being handled by ${interaction.user}.`
+    ));
 
-    await sendNamedLog(
+    await replyPrivate(interaction, "Ticket claimed.");
+
+    await sendLog(
         interaction.guild,
-        cfg.ticketLogChannel,
-        `Ticket ${channel.name} claimed by ${interaction.user.tag}.`
+        `${interaction.user.tag} claimed ${interaction.channel}.`,
+        true
+    );
+}
+
+async function makeTicketTranscript(channel, closingUser, reason) {
+    const messages = [];
+    let before;
+
+    for (let page = 0; page < 10; page++) {
+        const batch = await channel.messages.fetch({
+            limit: 100,
+            ...(before ? { before } : {})
+        }).catch(error => {
+            console.error("Transcript message fetch failed:", error.message);
+            return null;
+        });
+
+        if (!batch?.size) break;
+
+        messages.push(...batch.values());
+        before = batch.last().id;
+
+        if (batch.size < 100) break;
+    }
+
+    messages.sort((a, b) => a.createdTimestamp - b.createdTimestamp);
+
+    const lines = [
+        "TEXAS OPERATIONS - TICKET TRANSCRIPT",
+        `Server: ${channel.guild.name} (${channel.guild.id})`,
+        `Channel: #${channel.name} (${channel.id})`,
+        `Closed by: ${closingUser.tag || closingUser.username} (${closingUser.id})`,
+        `Closure reason: ${reason}`,
+        `Generated: ${new Date().toISOString()}`,
+        `Messages included: ${messages.length}`,
+        "=".repeat(70),
+        ""
+    ];
+
+    for (const message of messages) {
+        const timestamp = new Date(message.createdTimestamp).toISOString();
+
+        const author = message.author
+            ? `${message.author.tag || message.author.username} (${message.author.id})`
+            : "Unknown user";
+
+        let content = message.content || "";
+
+        if (message.embeds?.length) {
+            content += "\n[Embeds: " + message.embeds.length + "]";
+        }
+
+        if (message.attachments?.size) {
+            content += "\nAttachments:\n" +
+                message.attachments.map(a => a.url).join("\n");
+        }
+
+        if (message.stickers?.size) {
+            content += "\n[Stickers: " +
+                message.stickers.map(s => s.name).join(", ") + "]";
+        }
+
+        if (!content.trim()) content = "[No text content]";
+
+        lines.push(`[${timestamp}] ${author}`);
+        lines.push(content);
+        lines.push("-".repeat(50));
+    }
+
+    return Buffer.from(lines.join("\n"), "utf8");
+}
+
+async function closeTicketChannel(channel, closingUser, reason) {
+    const key = findTicketKey(channel.guild.id, channel.id);
+
+    if (!key) {
+        throw new Error("This is not a recognized ticket channel.");
+    }
+
+    const ownerId = key.split(":")[1];
+    const closureReason = clean(reason, 1000);
+
+    const transcript = await makeTicketTranscript(
+        channel,
+        closingUser,
+        closureReason
     );
 
-    return replyPrivate(interaction, "You have claimed this ticket.");
+    const attachment = new AttachmentBuilder(transcript, {
+        name: `texas-ticket-${channel.id}-transcript.txt`,
+        description: "Texas Operations ticket transcript"
+    });
+
+    let dmSent = false;
+
+    try {
+        const owner = await client.users.fetch(ownerId);
+
+        await owner.send({
+            content:
+                `Your Texas Operations ticket **#${channel.name}** has been closed.\n` +
+                `**Closed by:** ${closingUser.tag || closingUser.username}\n` +
+                `**Reason:** ${closureReason}\n\n` +
+                "Your ticket transcript is attached.",
+            files: [attachment],
+            allowedMentions: { parse: [] }
+        });
+
+        dmSent = true;
+    } catch (error) {
+        console.error("Could not DM ticket transcript:", error.message);
+    }
+
+    await sendLog(
+        channel.guild,
+        `**Ticket closed:** #${channel.name}\n` +
+        `**Ticket owner:** <@${ownerId}> (${ownerId})\n` +
+        `**Closed by:** ${closingUser.tag || closingUser.username} (${closingUser.id})\n` +
+        `**Reason:** ${closureReason}\n` +
+        `**Transcript DM:** ${dmSent ? "Sent successfully" : "Could not deliver; the user's DMs may be disabled"}`,
+        true
+    );
+
+    tickets.delete(key);
+    claims.delete(channel.id);
+
+    await channel.send(makeV2(
+        "Ticket Closed",
+        `**Closed by:** ${closingUser}\n` +
+        `**Reason:** ${closureReason}\n` +
+        `**Transcript DM:** ${dmSent ? "Sent to the ticket owner." : "Could not DM the owner."}\n\n` +
+        "This channel will be deleted shortly."
+    )).catch(() => {});
+
+    setTimeout(() => {
+        channel.delete(
+            `Ticket closed by ${closingUser.tag || closingUser.username}. Reason: ${closureReason}`
+        ).catch(console.error);
+    }, 3000);
+
+    return { dmSent };
 }
 
 async function closeTicket(interaction) {
     const channel = interaction.channel;
-    const ticket = tickets.get(channel.id);
+    const key = findTicketKey(interaction.guildId, channel.id);
 
-    if (!ticket) {
-        return replyPrivate(interaction, "This channel is not an active ticket.");
+    if (!key) {
+        return replyPrivate(interaction, "This is not a recognized ticket.");
     }
 
-    if (
-        interaction.user.id !== ticket.ownerId &&
-        !isStaff(interaction.member)
-    ) {
-        return replyPrivate(interaction, "Only the ticket owner or staff can close this ticket.");
+    const ownerId = key.split(":")[1];
+
+    if (ownerId !== interaction.user.id && !isStaff(interaction.member)) {
+        return replyPrivate(
+            interaction,
+            "Only the ticket owner or staff can close this ticket."
+        );
     }
 
     const modal = new ModalBuilder()
         .setCustomId("ticket:close:reason")
         .setTitle("Close Ticket");
 
-    const reason = new TextInputBuilder()
+    const reasonInput = new TextInputBuilder()
         .setCustomId("reason")
         .setLabel("Reason for closing")
-        .setPlaceholder("Enter a short closing reason")
-        .setStyle(TextInputStyle.Short)
-        .setMaxLength(300)
+        .setPlaceholder("Explain why this ticket is being closed")
+        .setStyle(TextInputStyle.Paragraph)
+        .setMaxLength(1000)
         .setRequired(true);
 
-    modal.addComponents(row(reason));
+    modal.addComponents(row(reasonInput));
+
     return interaction.showModal(modal);
 }
 
 async function submitTicketClosure(interaction) {
     const channel = interaction.channel;
-    const ticket = tickets.get(channel.id);
+    const key = findTicketKey(interaction.guildId, channel.id);
 
-    if (!ticket) {
-        return replyPrivate(interaction, "This ticket is no longer active.");
+    if (!key) {
+        return replyPrivate(interaction, "This ticket is no longer recognized.");
     }
 
-    if (
-        interaction.user.id !== ticket.ownerId &&
-        !isStaff(interaction.member)
-    ) {
-        return replyPrivate(interaction, "Only the ticket owner or staff can close this ticket.");
+    const ownerId = key.split(":")[1];
+
+    if (ownerId !== interaction.user.id && !isStaff(interaction.member)) {
+        return replyPrivate(
+            interaction,
+            "Only the ticket owner or staff can close this ticket."
+        );
     }
 
     const reason = clean(
         interaction.fields.getTextInputValue("reason"),
-        300
+        1000
     );
 
-    await replyPrivate(interaction, "Ticket is being closed.");
+    await replyPrivate(interaction, "Closing ticket and generating transcript...");
 
-    await sendNamedLog(
-        interaction.guild,
-        cfg.ticketLogChannel,
-        `Ticket closed: ${channel.name}. Owner: ${ticket.ownerId}. Closed by: ${interaction.user.tag}. Reason: ${reason}`
-    );
-
-    tickets.delete(channel.id);
-
-    await channel.delete(`Ticket closed by ${interaction.user.tag}: ${reason}`)
-        .catch(error => console.error("Ticket deletion failed:", error));
-}
-
-async function submitPriorityRequest(interaction) {
-    const scene = clean(
-        interaction.fields.getTextInputValue("scene"),
-        100
-    );
-
-    const location = clean(
-        interaction.fields.getTextInputValue("location"),
-        150
-    );
-
-    const details = clean(
-        interaction.fields.getTextInputValue("details"),
-        800
-    );
-
-    const id = `${Date.now()}-${interaction.user.id}`;
-
-    const request = {
-        id,
-        guildId: interaction.guildId,
-        userId: interaction.user.id,
-        scene,
-        location,
-        details,
-        createdAt: Date.now(),
-        status: "pending"
-    };
-
-    priorityRequests.set(id, request);
-
-    const approve = new ButtonBuilder()
-        .setCustomId(`priority:approve:${id}`)
-        .setLabel("Approve")
-        .setStyle(ButtonStyle.Success);
-
-    const deny = new ButtonBuilder()
-        .setCustomId(`priority:deny:${id}`)
-        .setLabel("Deny")
-        .setStyle(ButtonStyle.Danger);
-
-    const container = new ContainerBuilder()
-        .setAccentColor(0xE67E22)
-        .addTextDisplayComponents(
-            new TextDisplayBuilder().setContent(
-                "# New Priority Request\n" +
-                `**Requested by:** <@${interaction.user.id}>\n` +
-                `**Scene:** ${scene}\n` +
-                `**Location:** ${location}\n` +
-                `**Details:** ${details}\n` +
-                `**Status:** Pending review`
-            )
-        )
-        .addSeparatorComponents(new SeparatorBuilder())
-        .addActionRowComponents(row(approve, deny));
-
-    const destination =
-        channelById(interaction.guild, cfg.priorityAnnouncementChannel) ||
-        channelById(interaction.guild, cfg.priorityPanelChannel);
-
-    if (!destination) {
-        priorityRequests.delete(id);
-        return replyPrivate(
-            interaction,
-            "The priority request channel is not configured. Contact an administrator."
-        );
-    }
-
-    const sent = await destination.send({
-        components: [container],
-        flags: V2
-    });
-
-    request.messageId = sent.id;
-    request.channelId = destination.id;
-
-    await sendLog(
-        interaction.guild,
-        `Priority request submitted by ${interaction.user.tag}: ${scene} at ${location}.`,
-        true
-    );
-
-    return replyPrivate(
-        interaction,
-        "Your priority request has been submitted for staff review."
-    );
-}
-
-async function approvePriorityRequest(interaction, request) {
-    if (!isPriorityStaff(interaction.member)) {
-        return replyPrivate(interaction, "You are not authorized to approve priority requests.");
-    }
-
-    if (request.status !== "pending") {
-        return replyPrivate(interaction, "This request has already been reviewed.");
-    }
-
-    request.status = "approved";
-    request.approvedBy = interaction.user.id;
-
-    const container = new ContainerBuilder()
-        .setAccentColor(0x2ECC71)
-        .addTextDisplayComponents(
-            new TextDisplayBuilder().setContent(
-                "# Priority Request Approved\n" +
-                `**Scene:** ${request.scene}\n` +
-                `**Location:** ${request.location}\n` +
-                `**Requested by:** <@${request.userId}>\n` +
-                `**Approved by:** ${interaction.user}\n\n` +
-                "Staff may now start this priority scene."
-            )
-        )
-        .addSeparatorComponents(new SeparatorBuilder())
-        .addActionRowComponents(row(
-            new ButtonBuilder()
-                .setCustomId(`priority:start:${request.id}`)
-                .setLabel("Start Priority")
-                .setStyle(ButtonStyle.Success)
-        ));
-
-    await interaction.message.edit({
-        components: [container],
-        flags: V2
-    });
-
-    await sendLog(
-        interaction.guild,
-        `Priority request ${request.id} approved by ${interaction.user.tag}.`,
-        true
-    );
-
-    return replyPrivate(interaction, "Priority request approved.");
-}
-
-async function denyPriorityRequest(interaction, request) {
-    if (!isPriorityStaff(interaction.member)) {
-        return replyPrivate(interaction, "You are not authorized to deny priority requests.");
-    }
-
-    if (request.status !== "pending") {
-        return replyPrivate(interaction, "This request has already been reviewed.");
-    }
-
-    request.status = "denied";
-    request.deniedBy = interaction.user.id;
-
-    const container = new ContainerBuilder()
-        .setAccentColor(0xE74C3C)
-        .addTextDisplayComponents(
-            new TextDisplayBuilder().setContent(
-                "# Priority Request Denied\n" +
-                `**Scene:** ${request.scene}\n` +
-                `**Location:** ${request.location}\n` +
-                `**Requested by:** <@${request.userId}>\n` +
-                `**Denied by:** ${interaction.user}`
-            )
+    try {
+        const result = await closeTicketChannel(
+            channel,
+            interaction.user,
+            reason
         );
 
-    await interaction.message.edit({
-        components: [container],
-        flags: V2
-    });
+        if (!result.dmSent) {
+            await interaction.followUp({
+                content:
+                    "The ticket was closed, but the transcript DM could not be delivered. The user may have DMs disabled.",
+                flags: EPHEMERAL
+            }).catch(() => {});
+        }
+    } catch (error) {
+        console.error("Ticket closure failed:", error);
 
-    await sendLog(
-        interaction.guild,
-        `Priority request ${request.id} denied by ${interaction.user.tag}.`,
-        true
-    );
-
-    return replyPrivate(interaction, "Priority request denied.");
+        await interaction.followUp({
+            content: `Ticket closure failed: ${error.message}`,
+            flags: EPHEMERAL
+        }).catch(() => {});
+    }
 }
+/* =========================================================
+   PRIORITY SCENES
+========================================================= */
 
-async function startPriorityRequest(interaction, request) {
-    if (!isPriorityStaff(interaction.member)) {
-        return replyPrivate(interaction, "You are not authorized to start priority scenes.");
-    }
-
-    if (request.status !== "approved") {
-        return replyPrivate(interaction, "This request has not been approved.");
-    }
-
-    if (priorities.has(interaction.guildId)) {
-        return replyPrivate(interaction, "A priority scene is already active.");
-    }
-
-    request.status = "started";
-
-    priorities.set(interaction.guildId, {
-        scene: request.scene,
-        location: request.location,
-        userId: interaction.user.id,
-        startedAt: Date.now(),
-        requestId: request.id
-    });
-
-    await announcePriorityStart(interaction.guild, request, interaction.user);
-
-    const timer = setTimeout(async () => {
-        await endPriority(interaction.guild, client.user, true);
-    }, cfg.priorityDurationMinutes * 60 * 1000);
-
-    priorityTimers.set(interaction.guildId, timer);
-
-    const container = new ContainerBuilder()
-        .setAccentColor(0x2ECC71)
-        .addTextDisplayComponents(
-            new TextDisplayBuilder().setContent(
-                "# Priority Started\n" +
-                `**Scene:** ${request.scene}\n` +
-                `**Location:** ${request.location}\n` +
-                `**Started by:** ${interaction.user}\n` +
-                `**Duration:** ${cfg.priorityDurationMinutes} minutes`
-            )
-        );
-
-    await interaction.message.edit({
-        components: [container],
-        flags: V2
-    });
-
-    await sendLog(
-        interaction.guild,
-        `Priority started from request ${request.id} by ${interaction.user.tag}.`,
-        true
-    );
-
-    return replyPrivate(interaction, "Priority scene started.");
-}
-
-async function announcePriorityStart(guild, request, user) {
-    const channel = channelById(guild, cfg.priorityAnnouncementChannel);
-    if (!channel) return;
-
-    await channel.send(makeV2(
-        "Priority Scene Started",
-        `A priority scene has been started at **${request.location}**.\n\n` +
-        `**Scene:** ${request.scene}\n` +
-        `**Started by:** ${user}\n` +
-        `**Duration:** ${cfg.priorityDurationMinutes} minutes`,
-        { color: 0xE67E22, banner: cfg.priorityBanner }
-    ));
-
-    await sendLog(
-        guild,
-        `Priority scene started: ${request.scene} at ${request.location}.`,
-        true
+function priorityPanel() {
+    return makeV2(
+        "Priority Scene Control",
+        "Choose a scene type, then enter its location. The bot will update the voice channel status and speak using an installed Windows voice where available.",
+        [row(
+            new StringSelectMenuBuilder()
+                .setCustomId("priority:choose")
+                .setPlaceholder("Choose a priority scene")
+                .addOptions(
+                    { label: "Vehicle Pursuit", value: "Vehicle Pursuit" },
+                    { label: "Hostage Scene", value: "Hostage Scene" }
+                )
+        )]
     );
 }
 
-async function endPriority(guild, user, automatic = false) {
-    if (!guild) return;
-
+async function endPriority(guild, user) {
     const previous = priorities.get(guild.id);
-    if (!previous) return;
 
     priorities.delete(guild.id);
 
-    const timer = priorityTimers.get(guild.id);
-    if (timer) clearTimeout(timer);
-    priorityTimers.delete(guild.id);
+    if (cfg.voiceChannel) {
+        const voice = await client.channels
+            .fetch(cfg.voiceChannel)
+            .catch(() => null);
 
-    const channel = channelById(guild, cfg.priorityAnnouncementChannel);
-
-    if (channel) {
-        await channel.send(makeV2(
-            "Priority Scene Ended",
-            `The active priority scene has ended.\n\n` +
-            `**Scene:** ${previous.scene}\n` +
-            `**Location:** ${previous.location}\n` +
-            `**Ended by:** ${user}\n` +
-            `**Duration:** ${Math.floor((Date.now() - previous.startedAt) / 60000)} minutes\n` +
-            `**End type:** ${automatic ? "Automatic timer" : "Manual"}`
-        )).catch(console.error);
+        if (voice && typeof voice.setStatus === "function") {
+            await voice.setStatus("").catch(error => {
+                console.error("Could not clear voice status:", error.message);
+            });
+        }
     }
 
     await sendLog(
         guild,
-        `Priority ended ${automatic ? "automatically" : "manually"} by ${user.tag || user.username}.` +
-        (previous ? ` Previous scene: ${previous.scene} at ${previous.location}.` : ""),
+        `Priority ended by ${user.tag || user.username}.` +
+        (previous
+            ? ` Previous scene: ${previous.scene} at ${previous.location}.`
+            : ""),
         true
     );
 }
 
-/* SLASH COMMANDS */
+/* =========================================================
+   SLASH COMMAND DEFINITIONS
+========================================================= */
 
 const sessionCommand = new SlashCommandBuilder()
     .setName("session")
@@ -1135,109 +1436,222 @@ const sessionCommand = new SlashCommandBuilder()
         .setDescription("Announce that the session is closed"));
 
 const commands = [
-    new SlashCommandBuilder().setName("help").setDescription("Show bot commands"),
-    new SlashCommandBuilder().setName("ticketpanel").setDescription("Send the ticket panel"),
-    new SlashCommandBuilder().setName("priority").setDescription("Open staff priority controls"),
-    new SlashCommandBuilder().setName("priority-panel").setDescription("Publish the public priority request panel"),
-    new SlashCommandBuilder().setName("endpriority").setDescription("End the active priority"),
+    new SlashCommandBuilder()
+        .setName("help")
+        .setDescription("Show bot commands"),
+
+    new SlashCommandBuilder()
+        .setName("ticketpanel")
+        .setDescription("Send the ticket panel"),
+
+    new SlashCommandBuilder()
+        .setName("priority")
+        .setDescription("Open priority controls"),
+
+    new SlashCommandBuilder()
+        .setName("endpriority")
+        .setDescription("End the active priority"),
+
     sessionCommand,
 
     new SlashCommandBuilder()
-        .setName("feedback").setDescription("Submit feedback")
-        .addIntegerOption(o => o.setName("rating").setDescription("Rating from 0 to 5").setMinValue(0).setMaxValue(5).setRequired(true))
-        .addStringOption(o => o.setName("message").setDescription("Feedback text").setRequired(true).setMaxLength(1000)),
+        .setName("feedback")
+        .setDescription("Submit feedback")
+        .addIntegerOption(o => o
+            .setName("rating")
+            .setDescription("Rating from 0 to 5")
+            .setMinValue(0)
+            .setMaxValue(5)
+            .setRequired(true))
+        .addStringOption(o => o
+            .setName("message")
+            .setDescription("Feedback text")
+            .setRequired(true)
+            .setMaxLength(1000)),
 
     new SlashCommandBuilder()
-        .setName("appresult").setDescription("Publish an application result")
-        .addUserOption(o => o.setName("user").setDescription("Applicant").setRequired(true))
-        .addStringOption(o => o.setName("result").setDescription("Result").setRequired(true)
-            .addChoices({ name: "Pass", value: "Pass" }, { name: "Fail", value: "Fail" }))
-        .addIntegerOption(o => o.setName("score").setDescription("Score out of 100").setMinValue(0).setMaxValue(100))
-        .addStringOption(o => o.setName("notes").setDescription("Notes").setMaxLength(1000)),
+        .setName("appresult")
+        .setDescription("Publish an application result")
+        .addUserOption(o => o
+            .setName("user")
+            .setDescription("Applicant")
+            .setRequired(true))
+        .addStringOption(o => o
+            .setName("result")
+            .setDescription("Result")
+            .setRequired(true)
+            .addChoices(
+                { name: "Pass", value: "Pass" },
+                { name: "Fail", value: "Fail" }
+            ))
+        .addIntegerOption(o => o
+            .setName("score")
+            .setDescription("Score out of 100")
+            .setMinValue(0)
+            .setMaxValue(100))
+        .addStringOption(o => o
+            .setName("notes")
+            .setDescription("Notes")
+            .setMaxLength(1000)),
 
     new SlashCommandBuilder()
-        .setName("promotion").setDescription("Announce a promotion")
-        .addUserOption(o => o.setName("user").setDescription("Member").setRequired(true))
-        .addStringOption(o => o.setName("rank").setDescription("New rank").setRequired(true))
-        .addStringOption(o => o.setName("reason").setDescription("Reason")),
+        .setName("promotion")
+        .setDescription("Announce a promotion")
+        .addUserOption(o => o
+            .setName("user")
+            .setDescription("Member")
+            .setRequired(true))
+        .addStringOption(o => o
+            .setName("rank")
+            .setDescription("New rank")
+            .setRequired(true))
+        .addStringOption(o => o
+            .setName("reason")
+            .setDescription("Reason")),
 
     new SlashCommandBuilder()
-        .setName("infraction").setDescription("Record an infraction")
-        .addUserOption(o => o.setName("user").setDescription("Member").setRequired(true))
-        .addStringOption(o => o.setName("type").setDescription("Infraction type").setRequired(true)
+        .setName("infraction")
+        .setDescription("Record an infraction")
+        .addUserOption(o => o
+            .setName("user")
+            .setDescription("Member")
+            .setRequired(true))
+        .addStringOption(o => o
+            .setName("type")
+            .setDescription("Infraction type")
+            .setRequired(true)
             .addChoices(
                 { name: "Warning", value: "Warning" },
                 { name: "Strike", value: "Strike" },
                 { name: "Demotion", value: "Demotion" },
                 { name: "Termination", value: "Termination" }
             ))
-        .addStringOption(o => o.setName("reason").setDescription("Reason").setRequired(true)),
+        .addStringOption(o => o
+            .setName("reason")
+            .setDescription("Reason")
+            .setRequired(true)),
 
     new SlashCommandBuilder()
-        .setName("say").setDescription("Send a plain-text message")
-        .addStringOption(o => o.setName("message").setDescription("Message to send").setRequired(true).setMaxLength(2000)),
+        .setName("say")
+        .setDescription("Send a plain-text message")
+        .addStringOption(o => o
+            .setName("message")
+            .setDescription("Message to send")
+            .setRequired(true)
+            .setMaxLength(2000)),
 
     new SlashCommandBuilder()
-        .setName("mediapost").setDescription("Publish a photo/media post with credit")
-        .addAttachmentOption(o => o.setName("file").setDescription("Main image or file").setRequired(true))
-        .addAttachmentOption(o => o.setName("file2").setDescription("Additional image or file"))
-        .addAttachmentOption(o => o.setName("file3").setDescription("Additional image or file"))
-        .addAttachmentOption(o => o.setName("file4").setDescription("Additional image or file"))
-        .addStringOption(o => o.setName("caption").setDescription("Optional caption").setMaxLength(1000))
-        .addUserOption(o => o.setName("photo_by").setDescription("Person to credit in the post")),
+        .setName("kick")
+        .setDescription("Kick a member")
+        .addUserOption(o => o
+            .setName("user")
+            .setDescription("Member")
+            .setRequired(true))
+        .addStringOption(o => o
+            .setName("reason")
+            .setDescription("Reason")),
 
     new SlashCommandBuilder()
-        .setName("kick").setDescription("Kick a member")
-        .addUserOption(o => o.setName("user").setDescription("Member").setRequired(true))
-        .addStringOption(o => o.setName("reason").setDescription("Reason")),
+        .setName("ban")
+        .setDescription("Ban a member")
+        .addUserOption(o => o
+            .setName("user")
+            .setDescription("Member")
+            .setRequired(true))
+        .addStringOption(o => o
+            .setName("reason")
+            .setDescription("Reason")),
 
     new SlashCommandBuilder()
-        .setName("ban").setDescription("Ban a member")
-        .addUserOption(o => o.setName("user").setDescription("Member").setRequired(true))
-        .addStringOption(o => o.setName("reason").setDescription("Reason")),
+        .setName("unban")
+        .setDescription("Unban a user by ID")
+        .addStringOption(o => o
+            .setName("userid")
+            .setDescription("User ID")
+            .setRequired(true))
+        .addStringOption(o => o
+            .setName("reason")
+            .setDescription("Reason")),
 
     new SlashCommandBuilder()
-        .setName("unban").setDescription("Unban a user by ID")
-        .addStringOption(o => o.setName("userid").setDescription("User ID").setRequired(true))
-        .addStringOption(o => o.setName("reason").setDescription("Reason")),
+        .setName("timeout")
+        .setDescription("Timeout a member")
+        .addUserOption(o => o
+            .setName("user")
+            .setDescription("Member")
+            .setRequired(true))
+        .addIntegerOption(o => o
+            .setName("minutes")
+            .setDescription("Duration in minutes")
+            .setMinValue(1)
+            .setMaxValue(40320)
+            .setRequired(true))
+        .addStringOption(o => o
+            .setName("reason")
+            .setDescription("Reason")),
 
     new SlashCommandBuilder()
-        .setName("timeout").setDescription("Timeout a member")
-        .addUserOption(o => o.setName("user").setDescription("Member").setRequired(true))
-        .addIntegerOption(o => o.setName("minutes").setDescription("Duration in minutes").setMinValue(1).setMaxValue(40320).setRequired(true))
-        .addStringOption(o => o.setName("reason").setDescription("Reason")),
+        .setName("untimeout")
+        .setDescription("Remove a timeout")
+        .addUserOption(o => o
+            .setName("user")
+            .setDescription("Member")
+            .setRequired(true))
+        .addStringOption(o => o
+            .setName("reason")
+            .setDescription("Reason")),
 
     new SlashCommandBuilder()
-        .setName("untimeout").setDescription("Remove a timeout")
-        .addUserOption(o => o.setName("user").setDescription("Member").setRequired(true))
-        .addStringOption(o => o.setName("reason").setDescription("Reason")),
+        .setName("purge")
+        .setDescription("Delete messages")
+        .addIntegerOption(o => o
+            .setName("amount")
+            .setDescription("Number from 1 to 100")
+            .setMinValue(1)
+            .setMaxValue(100)
+            .setRequired(true)),
 
     new SlashCommandBuilder()
-        .setName("purge").setDescription("Delete messages")
-        .addIntegerOption(o => o.setName("amount").setDescription("Number from 1 to 100").setMinValue(1).setMaxValue(100).setRequired(true)),
+        .setName("warn")
+        .setDescription("Warn a member")
+        .addUserOption(o => o
+            .setName("user")
+            .setDescription("Member")
+            .setRequired(true))
+        .addStringOption(o => o
+            .setName("reason")
+            .setDescription("Reason")
+            .setRequired(true)),
 
     new SlashCommandBuilder()
-        .setName("warn").setDescription("Warn a member")
-        .addUserOption(o => o.setName("user").setDescription("Member").setRequired(true))
-        .addStringOption(o => o.setName("reason").setDescription("Reason").setRequired(true)),
-
-    new SlashCommandBuilder()
-        .setName("dm").setDescription("Send a direct message to a user")
-        .addUserOption(o => o.setName("user").setDescription("Recipient").setRequired(true))
-        .addStringOption(o => o.setName("message").setDescription("Message").setRequired(true).setMaxLength(2000))
+        .setName("dm")
+        .setDescription("Send a direct message to a user")
+        .addUserOption(o => o
+            .setName("user")
+            .setDescription("Recipient")
+            .setRequired(true))
+        .addStringOption(o => o
+            .setName("message")
+            .setDescription("Message")
+            .setRequired(true)
+            .setMaxLength(2000))
 ].map(command => command.toJSON());
 
 async function registerCommands() {
     const rest = new REST({ version: "10" }).setToken(cfg.token);
+
     const route = cfg.guildId
         ? Routes.applicationGuildCommands(cfg.clientId, cfg.guildId)
         : Routes.applicationCommands(cfg.clientId);
 
     await rest.put(route, { body: commands });
+
     console.log(`Registered ${commands.length} slash commands.`);
 }
 
-/* COMMAND HANDLER */
+/* =========================================================
+   COMMAND HANDLER
+========================================================= */
 
 async function executeCommand(ctx, name, args = {}) {
     const interaction = ctx.isChatInputCommand();
@@ -1247,7 +1661,6 @@ async function executeCommand(ctx, name, args = {}) {
     const get = (key, type = "string") => {
         if (!interaction) return args[key] ?? null;
         if (type === "user") return ctx.options.getUser(key);
-        if (type === "attachment") return ctx.options.getAttachment(key);
         if (type === "integer") return ctx.options.getInteger(key);
         return ctx.options.getString(key);
     };
@@ -1256,33 +1669,37 @@ async function executeCommand(ctx, name, args = {}) {
         interaction ? replyPrivate(ctx, message) : ctx.reply(message);
 
     switch (name) {
-        case "help": {
-            const payload = makeV2(
+        case "help":
+            return reply(makeV2(
                 "Texas Operations Commands",
                 "**Sessions:** `/session vote`, `/session start`, `/session shutdown`\n" +
                 "**Tickets:** `/ticketpanel`\n" +
-                "**Priority:** `/priority-panel`, `/priority`, `/endpriority`\n" +
+                "**Priority:** `/priority`, `/endpriority`\n" +
                 "**Staff:** `/promotion`, `/infraction`, `/appresult`\n" +
                 "**Moderation:** `/kick`, `/ban`, `/unban`, `/timeout`, `/untimeout`, `/purge`, `/warn`\n" +
-                "**Other:** `/feedback`, `/say`, `/dm`, `/mediapost`"
-            );
-
-            return interaction
-                ? ctx.reply({ ...payload, flags: V2 | EPHEMERAL })
-                : ctx.reply(payload);
-        }
+                "**Other:** `/feedback`, `/say`, `/dm`\n\n" +
+                "**Prefix commands:** `!help`, `-help`, `!ticketpanel`, `-ticketpanel`, `!priority`, `-priority`, `!endpriority`, `-endpriority`, `!say`, `-say`, `!dm`, `-dm`, `!purge`, `-purge`, `!kick`, `-kick`, `!ban`, `-ban`, `!unban`, `-unban`, `!timeout`, `-timeout`, `!untimeout`, `-untimeout`, `!warn`, `-warn`, `!promotion`, `-promotion`, `!infraction`, `-infraction`, `!appresult`, `-appresult`, `!feedback`, `-feedback`, `!session`, `-session`"
+            ));
 
         case "session": {
             if (!await requireStaff(ctx)) return;
-            const sub = interaction ? ctx.options.getSubcommand() : args.subcommand;
+
+            const sub = interaction
+                ? ctx.options.getSubcommand()
+                : args.subcommand;
 
             if (sub === "vote") {
-                const required = get("required_votes", "integer") || cfg.requiredVotes;
+                const required =
+                    get("required_votes", "integer") ||
+                    cfg.requiredVotes;
+
                 const channel = cfg.sessionChannel
                     ? channelById(guild, cfg.sessionChannel)
                     : ctx.channel;
 
-                if (!channel) return reply("The session vote channel is not configured.");
+                if (!channel) {
+                    return reply("The session vote channel is not configured.");
+                }
 
                 const state = {
                     guildId: guild.id,
@@ -1294,15 +1711,19 @@ async function executeCommand(ctx, name, args = {}) {
                 };
 
                 const sent = await channel.send(votePanel(state));
+
                 state.messageId = sent.id;
                 sessionVotes.set(guild.id, state);
 
-                await sendLog(guild,
+                await sendLog(
+                    guild,
                     `Session vote started by ${user.tag}. Required yes votes: ${required}.`,
                     true
                 );
 
-                return reply(`Session vote started in ${channel}; ${required} yes votes are required.`);
+                return reply(
+                    `Session vote started in ${channel}; ${required} yes votes are required.`
+                );
             }
 
             if (sub === "start") {
@@ -1331,35 +1752,29 @@ async function executeCommand(ctx, name, args = {}) {
             await ctx.channel.send(ticketPanel());
             return reply("Ticket panel sent.");
 
-        case "priority-panel": {
-            if (!await requireStaff(ctx)) return;
-
-            const destination = cfg.priorityPanelChannel
-                ? channelById(guild, cfg.priorityPanelChannel)
-                : ctx.channel;
-
-            if (!destination) {
-                return reply("Priority panel channel is missing or invalid.");
-            }
-
-            await destination.send(priorityPublicPanel());
-            return reply(`Public priority request panel sent in ${destination}.`);
-        }
-
         case "priority":
             if (!await requireStaff(ctx)) return;
-            return interaction
-                ? ctx.reply({ ...priorityPanel(), flags: V2 | EPHEMERAL })
-                : ctx.reply(priorityPanel());
+
+            if (interaction) {
+                return ctx.reply({
+                    ...priorityPanel(),
+                    flags: V2 | EPHEMERAL
+                });
+            }
+
+            return ctx.reply(priorityPanel());
 
         case "endpriority":
             if (!await requireStaff(ctx)) return;
-            await endPriority(guild, user, false);
+            await endPriority(guild, user);
             return reply("Priority ended.");
 
         case "feedback": {
             const destination = channelById(guild, cfg.feedbackChannel);
-            if (!destination) return reply("Feedback channel is not configured.");
+
+            if (!destination) {
+                return reply("Feedback channel is not configured.");
+            }
 
             await destination.send(makeV2(
                 "Texas Operations Feedback",
@@ -1368,7 +1783,12 @@ async function executeCommand(ctx, name, args = {}) {
                 `**Feedback:** ${clean(get("message"))}`
             ));
 
-            await sendLog(guild, `Feedback submitted by ${user.tag || user.username}.`, true);
+            await sendLog(
+                guild,
+                `Feedback submitted by ${user.tag || user.username}.`,
+                true
+            );
+
             return reply("Thank you. Your feedback has been submitted.");
         }
 
@@ -1380,18 +1800,24 @@ async function executeCommand(ctx, name, args = {}) {
             const score = get("score", "integer");
             const notes = get("notes") || "No notes provided.";
 
-            if (!target || !result) return reply("Usage: appresult @user Pass/Fail [score] [notes].");
+            if (!target || !result) {
+                return reply("Usage: appresult @user Pass/Fail [score] [notes].");
+            }
 
-            const destination = channelById(guild, cfg.applicationChannel) || ctx.channel;
+            const destination =
+                channelById(guild, cfg.applicationChannel) || ctx.channel;
 
             await destination.send(makeV2(
                 `Application ${result}`,
-                `**Applicant:** ${target}\n**Result:** ${result}\n` +
+                `**Applicant:** ${target}\n` +
+                `**Result:** ${result}\n` +
                 `**Score:** ${score == null ? "Not provided" : `${score}/100`}\n` +
-                `**Reviewed by:** ${user}\n**Notes:** ${notes}`
+                `**Reviewed by:** ${user}\n` +
+                `**Notes:** ${notes}`
             ));
 
-            await sendLog(guild,
+            await sendLog(
+                guild,
                 `Application result (${result}) published for ${target.tag} by ${user.tag}.`,
                 true
             );
@@ -1412,11 +1838,14 @@ async function executeCommand(ctx, name, args = {}) {
 
             await ctx.channel.send(makeV2(
                 "Staff Promotion",
-                `Congratulations to ${target}!\n\n**New rank:** ${rank}\n` +
-                `**Reason:** ${reason}\n**Announced by:** ${user}`
+                `Congratulations to ${target}!\n\n` +
+                `**New rank:** ${rank}\n` +
+                `**Reason:** ${reason}\n` +
+                `**Announced by:** ${user}`
             ));
 
-            await sendLog(guild,
+            await sendLog(
+                guild,
                 `${target.tag} promoted to ${rank} by ${user.tag}. Reason: ${reason}`,
                 true
             );
@@ -1437,11 +1866,14 @@ async function executeCommand(ctx, name, args = {}) {
 
             await ctx.channel.send(makeV2(
                 "Staff Infraction",
-                `**Member:** ${target}\n**Type:** ${type}\n` +
-                `**Reason:** ${reason}\n**Issued by:** ${user}`
+                `**Member:** ${target}\n` +
+                `**Type:** ${type}\n` +
+                `**Reason:** ${reason}\n` +
+                `**Issued by:** ${user}`
             ));
 
-            await sendLog(guild,
+            await sendLog(
+                guild,
                 `${type} issued to ${target.tag} by ${user.tag}. Reason: ${reason}`,
                 true
             );
@@ -1451,8 +1883,12 @@ async function executeCommand(ctx, name, args = {}) {
 
         case "say": {
             if (!await requireStaff(ctx)) return;
+
             const message = clean(get("message"), 2000);
-            if (message === "Not provided") return reply("Provide a message to send.");
+
+            if (message === "Not provided") {
+                return reply("Provide a message to send.");
+            }
 
             await ctx.channel.send({
                 content: message,
@@ -1462,152 +1898,138 @@ async function executeCommand(ctx, name, args = {}) {
             return reply("Message sent.");
         }
 
-        case "mediapost": {
-            if (!interaction) return reply("Use the /mediapost slash command to attach files.");
+        case "kick": {
             if (!await requireStaff(ctx)) return;
 
-            const files = ["file", "file2", "file3", "file4"]
-                .map(key => get(key, "attachment"))
-                .filter(Boolean);
+            const target = get("user", "user");
+            const reason = get("reason") || `Kicked by ${user.tag}`;
+            const member = target
+                ? await guild.members.fetch(target.id).catch(() => null)
+                : null;
 
-            if (!files.length) return reply("Please attach at least one file.");
-
-            const caption = get("caption") || "";
-            const creditedUser = get("photo_by", "user") || user;
-            const time = new Date().toLocaleTimeString("en-GB", {
-                hour: "2-digit",
-                minute: "2-digit"
-            });
-
-            const preparedFiles = files.map((file, index) => ({
-                source: file,
-                uploadName: `media-${index + 1}-${String(file.name || "file").replace(/[^\w.-]/g, "_").slice(0, 80)}`
-            }));
-
-            const description =
-                `📸 **Photo by:** ${creditedUser}` +
-                (caption.trim() ? `\n\n${caption.trim()}` : "");
-
-            const embeds = [];
-            let firstImageEmbed = true;
-
-            for (const file of preparedFiles) {
-                const isImage = /^image\/(png|jpe?g|gif|webp|avif)$/i.test(
-                    file.source.contentType || ""
-                );
-
-                if (!isImage) continue;
-
-                const embed = new EmbedBuilder()
-                    .setColor(0x283747)
-                    .setImage(`attachment://${file.uploadName}`);
-
-                if (firstImageEmbed) {
-                    embed.setDescription(description);
-                    embed.setFooter({ text: `Today at ${time}` });
-                    firstImageEmbed = false;
-                }
-
-                embeds.push(embed);
+            if (!member) return reply("Member not found.");
+            if (!member.kickable) {
+                return reply("I cannot kick this member. Check role hierarchy.");
             }
 
-            if (!embeds.length) {
-                embeds.push(
-                    new EmbedBuilder()
-                        .setColor(0x283747)
-                        .setDescription(description)
-                        .setFooter({ text: `Today at ${time}` })
-                );
-            }
-
-            await ctx.channel.send({
-                embeds,
-                files: preparedFiles.map(file => ({
-                    attachment: file.source.url,
-                    name: file.uploadName
-                })),
-                allowedMentions: { users: [creditedUser.id] }
-            });
+            await member.kick(reason);
 
             await sendLog(
                 guild,
-                `Media post published by ${user.tag} (${user.id}) in ${ctx.channel}.\n` +
-                `Photo credit: ${creditedUser.tag || creditedUser.username} (${creditedUser.id})\n` +
-                `Files: ${files.map(file => file.name).join(", ")}`,
+                `${target.tag} kicked by ${user.tag}. Reason: ${reason}`,
                 true
             );
 
-            return reply("Media post published successfully.");
-        }
-
-        case "kick": {
-            if (!await requireStaff(ctx)) return;
-            const target = get("user", "user");
-            const reason = get("reason") || `Kicked by ${user.tag}`;
-            const member = target ? await guild.members.fetch(target.id).catch(() => null) : null;
-
-            if (!member) return reply("Member not found.");
-            if (!member.kickable) return reply("I cannot kick this member. Check role hierarchy.");
-
-            await member.kick(reason);
-            await sendLog(guild, `${target.tag} kicked by ${user.tag}. Reason: ${reason}`, true);
             return reply(`Kicked ${target.tag}.`);
         }
 
         case "ban": {
             if (!await requireStaff(ctx)) return;
+
             const target = get("user", "user");
             const reason = get("reason") || `Banned by ${user.tag}`;
-            const member = target ? await guild.members.fetch(target.id).catch(() => null) : null;
+            const member = target
+                ? await guild.members.fetch(target.id).catch(() => null)
+                : null;
 
-            if (member && !member.bannable) return reply("I cannot ban this member. Check role hierarchy.");
+            if (member && !member.bannable) {
+                return reply("I cannot ban this member. Check role hierarchy.");
+            }
+
             if (!target) return reply("Member not found.");
 
             await guild.members.ban(target.id, { reason });
-            await sendLog(guild, `${target.tag} banned by ${user.tag}. Reason: ${reason}`, true);
+
+            await sendLog(
+                guild,
+                `${target.tag} banned by ${user.tag}. Reason: ${reason}`,
+                true
+            );
+
             return reply(`Banned ${target.tag}.`);
         }
 
         case "unban": {
             if (!await requireStaff(ctx)) return;
+
             const id = String(get("userid") || "");
 
-            if (!/^\d{17,20}$/.test(id)) return reply("Enter a valid Discord user ID.");
+            if (!/^\d{17,20}$/.test(id)) {
+                return reply("Enter a valid Discord user ID.");
+            }
 
-            await guild.members.unban(id, get("reason") || `Unbanned by ${user.tag}`);
-            await sendLog(guild, `User ID ${id} unbanned by ${user.tag}.`, true);
+            await guild.members.unban(
+                id,
+                get("reason") || `Unbanned by ${user.tag}`
+            );
+
+            await sendLog(
+                guild,
+                `User ID ${id} unbanned by ${user.tag}.`,
+                true
+            );
+
             return reply(`Unbanned user ID ${id}.`);
         }
 
         case "timeout": {
             if (!await requireStaff(ctx)) return;
+
             const target = get("user", "user");
             const minutes = Number(get("minutes", "integer"));
-            const member = target ? await guild.members.fetch(target.id).catch(() => null) : null;
+            const member = target
+                ? await guild.members.fetch(target.id).catch(() => null)
+                : null;
 
             if (!member) return reply("Member not found.");
-            if (!member.moderatable) return reply("I cannot timeout this member. Check role hierarchy.");
+            if (!member.moderatable) {
+                return reply("I cannot timeout this member. Check role hierarchy.");
+            }
 
-            await member.timeout(minutes * 60000, get("reason") || `Timed out by ${user.tag}`);
-            await sendLog(guild, `${target.tag} timed out for ${minutes} minutes by ${user.tag}.`, true);
+            await member.timeout(
+                minutes * 60000,
+                get("reason") || `Timed out by ${user.tag}`
+            );
+
+            await sendLog(
+                guild,
+                `${target.tag} timed out for ${minutes} minutes by ${user.tag}.`,
+                true
+            );
+
             return reply(`Timed out ${target.tag} for ${minutes} minutes.`);
         }
 
         case "untimeout": {
             if (!await requireStaff(ctx)) return;
+
             const target = get("user", "user");
-            const member = target ? await guild.members.fetch(target.id).catch(() => null) : null;
+            const member = target
+                ? await guild.members.fetch(target.id).catch(() => null)
+                : null;
 
             if (!member) return reply("Member not found.");
-            if (!member.moderatable) return reply("I cannot modify this member.");
+            if (!member.moderatable) {
+                return reply("I cannot modify this member.");
+            }
 
-            await member.timeout(null, get("reason") || `Timeout removed by ${user.tag}`);
-            await sendLog(guild, `Timeout removed from ${target.tag} by ${user.tag}.`, true);
+            await member.timeout(
+                null,
+                get("reason") || `Timeout removed by ${user.tag}`
+            );
+
+            await sendLog(
+                guild,
+                `Timeout removed from ${target.tag} by ${user.tag}.`,
+                true
+            );
+
             return reply(`Timeout removed from ${target.tag}.`);
         }
 
         case "purge": {
             if (!await requireStaff(ctx)) return;
+
             const amount = Number(get("amount", "integer"));
 
             if (!Number.isInteger(amount) || amount < 1 || amount > 100) {
@@ -1615,7 +2037,9 @@ async function executeCommand(ctx, name, args = {}) {
             }
 
             const deleted = await ctx.channel.bulkDelete(amount, true);
-            await sendLog(guild,
+
+            await sendLog(
+                guild,
                 `${user.tag} purged ${deleted.size} messages in #${ctx.channel.name}.`,
                 true
             );
@@ -1625,6 +2049,7 @@ async function executeCommand(ctx, name, args = {}) {
 
         case "warn": {
             if (!await requireStaff(ctx)) return;
+
             const target = get("user", "user");
             const reason = clean(get("reason"));
 
@@ -1647,11 +2072,14 @@ async function executeCommand(ctx, name, args = {}) {
                 true
             );
 
-            return reply(`Warned ${target.tag}. Warning count this session: ${list.length}.`);
+            return reply(
+                `Warned ${target.tag}. Warning count this session: ${list.length}.`
+            );
         }
 
         case "dm": {
             if (!await requireStaff(ctx)) return;
+
             const target = get("user", "user");
             const message = clean(get("message"), 2000);
 
@@ -1665,7 +2093,12 @@ async function executeCommand(ctx, name, args = {}) {
                     allowedMentions: { parse: [] }
                 });
 
-                await sendLog(guild, `Staff DM sent to ${target.tag} by ${user.tag}.`, true);
+                await sendLog(
+                    guild,
+                    `Staff DM sent to ${target.tag} by ${user.tag}.`,
+                    true
+                );
+
                 return reply(`Message sent to ${target.tag}.`);
             } catch {
                 return reply("Could not DM this user. Their DMs may be disabled.");
@@ -1673,13 +2106,19 @@ async function executeCommand(ctx, name, args = {}) {
         }
     }
 }
-/* READY AND MEMBER EVENTS */
+
+/* =========================================================
+   READY AND MEMBER EVENTS
+========================================================= */
 
 client.once("ready", async () => {
     console.log(`Logged in as ${client.user.tag}`);
-    console.log(`Prefix commands enabled: ${[...new Set([cfg.prefix, "!", "-"])].join(", ")}`);
-    console.log(`${BRAND} is online.`);
+    console.log(
+        `Prefix commands enabled: ${[...new Set([cfg.prefix, "!", "-"])].join(", ")}`
+    );
+    console.log("Texas Operations is online.");
     console.log("Windows speech mode: installed male voice preferred.");
+    console.log("One-unit-at-a-time system: removed.");
 
     await joinConfiguredVoiceChannel();
 });
@@ -1734,7 +2173,9 @@ client.on("guildMemberUpdate", async (oldMember, newMember) => {
     }
 });
 
-/* MESSAGE AND SERVER LOGGING */
+/* =========================================================
+   MESSAGE AND SERVER LOGGING
+========================================================= */
 
 client.on("messageDelete", async message => {
     if (!message.guild || message.author?.bot) return;
@@ -1770,6 +2211,7 @@ client.on("messageUpdate", async (oldMessage, newMessage) => {
 
 client.on("voiceStateUpdate", async (oldState, newState) => {
     const member = newState.member || oldState.member;
+
     if (!member || member.user.bot) return;
 
     if (!oldState.channelId && newState.channelId) {
@@ -1821,7 +2263,10 @@ client.on("roleDelete", role => {
 
 client.on("roleUpdate", (oldRole, newRole) => {
     if (oldRole.name !== newRole.name) {
-        sendLog(newRole.guild, `Role renamed from ${oldRole.name} to ${newRole.name}.`);
+        sendLog(
+            newRole.guild,
+            `Role renamed from ${oldRole.name} to ${newRole.name}.`
+        );
     }
 });
 
@@ -1833,7 +2278,9 @@ client.on("guildBanRemove", ban => {
     sendLog(ban.guild, `${ban.user.tag} was unbanned.`);
 });
 
-/* PREFIX COMMANDS */
+/* =========================================================
+   PREFIX COMMANDS
+========================================================= */
 
 client.on("messageCreate", async message => {
     if (!message.guild || message.author.bot) return;
@@ -1880,10 +2327,6 @@ client.on("messageCreate", async message => {
             return await executeCommand(ctx, "priority", args);
         }
 
-        if (name === "priority-panel" || name === "prioritypanel") {
-            return await executeCommand(ctx, "priority-panel", args);
-        }
-
         if (name === "endpriority") {
             return await executeCommand(ctx, "endpriority", args);
         }
@@ -1922,11 +2365,7 @@ client.on("messageCreate", async message => {
         if (name === "purge") {
             args.amount = Number(restText);
 
-            if (
-                !Number.isInteger(args.amount) ||
-                args.amount < 1 ||
-                args.amount > 100
-            ) {
+            if (!Number.isInteger(args.amount) || args.amount < 1 || args.amount > 100) {
                 return message.reply(`Usage: ${prefix}purge 1-100`);
             }
 
@@ -1972,14 +2411,8 @@ client.on("messageCreate", async message => {
                 args.minutes = Number(pieces.shift());
                 args.reason = pieces.join(" ") || undefined;
 
-                if (
-                    !Number.isInteger(args.minutes) ||
-                    args.minutes < 1 ||
-                    args.minutes > 40320
-                ) {
-                    return message.reply(
-                        `Usage: ${prefix}timeout @user minutes reason`
-                    );
+                if (!Number.isInteger(args.minutes) || args.minutes < 1 || args.minutes > 40320) {
+                    return message.reply(`Usage: ${prefix}timeout @user minutes reason`);
                 }
             } else if (name === "warn") {
                 args.reason = remaining;
@@ -2022,7 +2455,9 @@ client.on("messageCreate", async message => {
     }
 });
 
-/* INTERACTIONS */
+/* =========================================================
+   INTERACTIONS
+========================================================= */
 
 client.on("interactionCreate", async interaction => {
     try {
@@ -2035,35 +2470,17 @@ client.on("interactionCreate", async interaction => {
 
         if (interaction.isStringSelectMenu()) {
             if (interaction.customId === "ticket:create") {
-                const type = interaction.values[0];
-                const info = ticketTypes[type];
-
-                if (!info) {
-                    return replyPrivate(interaction, "Unknown ticket type.");
-                }
-
-                const modal = new ModalBuilder()
-                    .setCustomId(`ticket:inquiry:${type}`)
-                    .setTitle(`${info.label} Inquiry`);
-
-                const inquiry = new TextInputBuilder()
-                    .setCustomId("inquiry")
-                    .setLabel("What do you need help with?")
-                    .setPlaceholder("Describe your question, issue, or report...")
-                    .setStyle(TextInputStyle.Paragraph)
-                    .setMinLength(5)
-                    .setMaxLength(1500)
-                    .setRequired(true);
-
-                modal.addComponents(row(inquiry));
-                return interaction.showModal(modal);
+                return await createTicket(
+                    interaction,
+                    interaction.values[0]
+                );
             }
 
             if (interaction.customId === "priority:choose") {
-                if (!isPriorityStaff(interaction.member)) {
+                if (!isStaff(interaction.member)) {
                     return replyPrivate(
                         interaction,
-                        "Only authorized staff can activate priority scenes."
+                        "Only staff can activate priority scenes."
                     );
                 }
 
@@ -2082,6 +2499,7 @@ client.on("interactionCreate", async interaction => {
                     .setRequired(true);
 
                 modal.addComponents(row(location));
+
                 return interaction.showModal(modal);
             }
         }
@@ -2096,79 +2514,8 @@ client.on("interactionCreate", async interaction => {
                     interaction,
                     panel
                         ? `Use the support panel in ${panel} to open a ticket.`
-                        : "Please find the ticket panel in this server."
+                        : "Please find the Texas Operations ticket panel in this server."
                 );
-            }
-
-            if (interaction.customId === "priority:request") {
-                const modal = new ModalBuilder()
-                    .setCustomId("priority:request:modal")
-                    .setTitle("Request Priority");
-
-                const scene = new TextInputBuilder()
-                    .setCustomId("scene")
-                    .setLabel("Scene type")
-                    .setPlaceholder("Example: Bank Robbery, Hostage Scene")
-                    .setStyle(TextInputStyle.Short)
-                    .setMaxLength(100)
-                    .setRequired(true);
-
-                const location = new TextInputBuilder()
-                    .setCustomId("location")
-                    .setLabel("Scene location / postal")
-                    .setPlaceholder("Enter the location or postal")
-                    .setStyle(TextInputStyle.Short)
-                    .setMaxLength(150)
-                    .setRequired(true);
-
-                const details = new TextInputBuilder()
-                    .setCustomId("details")
-                    .setLabel("Scene details")
-                    .setPlaceholder("Explain what you are planning")
-                    .setStyle(TextInputStyle.Paragraph)
-                    .setMaxLength(800)
-                    .setRequired(true);
-
-                modal.addComponents(
-                    row(scene),
-                    row(location),
-                    row(details)
-                );
-
-                return interaction.showModal(modal);
-            }
-
-            if (interaction.customId.startsWith("priority:approve:")) {
-                const id = interaction.customId.split(":")[2];
-                const request = priorityRequests.get(id);
-
-                if (!request || request.guildId !== interaction.guildId) {
-                    return replyPrivate(interaction, "Priority request not found.");
-                }
-
-                return await approvePriorityRequest(interaction, request);
-            }
-
-            if (interaction.customId.startsWith("priority:deny:")) {
-                const id = interaction.customId.split(":")[2];
-                const request = priorityRequests.get(id);
-
-                if (!request || request.guildId !== interaction.guildId) {
-                    return replyPrivate(interaction, "Priority request not found.");
-                }
-
-                return await denyPriorityRequest(interaction, request);
-            }
-
-            if (interaction.customId.startsWith("priority:start:")) {
-                const id = interaction.customId.split(":")[2];
-                const request = priorityRequests.get(id);
-
-                if (!request || request.guildId !== interaction.guildId) {
-                    return replyPrivate(interaction, "Priority request not found.");
-                }
-
-                return await startPriorityRequest(interaction, request);
             }
 
             if (interaction.customId === "ticket:claim") {
@@ -2186,7 +2533,10 @@ client.on("interactionCreate", async interaction => {
                 const state = sessionVotes.get(interaction.guildId);
 
                 if (!state) {
-                    return replyPrivate(interaction, "There is no active session vote.");
+                    return replyPrivate(
+                        interaction,
+                        "There is no active session vote."
+                    );
                 }
 
                 state.votes.set(
@@ -2195,28 +2545,9 @@ client.on("interactionCreate", async interaction => {
                 );
 
                 await replyPrivate(interaction, "Your vote has been recorded.");
+
                 return await refreshVote(interaction.guildId);
             }
-        }
-
-        if (
-            interaction.isModalSubmit() &&
-            interaction.customId === "priority:request:modal"
-        ) {
-            return await submitPriorityRequest(interaction);
-        }
-
-        if (
-            interaction.isModalSubmit() &&
-            interaction.customId.startsWith("ticket:inquiry:")
-        ) {
-            const type = interaction.customId.slice("ticket:inquiry:".length);
-            const inquiry = clean(
-                interaction.fields.getTextInputValue("inquiry"),
-                1500
-            );
-
-            return await createTicket(interaction, type, inquiry);
         }
 
         if (
@@ -2230,18 +2561,17 @@ client.on("interactionCreate", async interaction => {
             interaction.isModalSubmit() &&
             interaction.customId.startsWith("priority:location:")
         ) {
-            if (!isPriorityStaff(interaction.member)) {
+            if (!isStaff(interaction.member)) {
                 return replyPrivate(
                     interaction,
-                    "Only authorized staff can activate priority scenes."
+                    "Only staff can activate priority scenes."
                 );
             }
 
-            if (priorities.has(interaction.guildId)) {
-                return replyPrivate(interaction, "A priority scene is already active.");
-            }
+            const scene = interaction.customId.slice(
+                "priority:location:".length
+            );
 
-            const scene = interaction.customId.slice("priority:location:".length);
             const location = clean(
                 interaction.fields.getTextInputValue("location"),
                 150
@@ -2255,27 +2585,17 @@ client.on("interactionCreate", async interaction => {
             });
 
             if (cfg.voiceChannel) {
-                const voice = await client.channels.fetch(cfg.voiceChannel).catch(() => null);
+                const voice = await client.channels
+                    .fetch(cfg.voiceChannel)
+                    .catch(() => null);
 
                 if (voice && typeof voice.setStatus === "function") {
-                    await voice.setStatus(`Priority: ${scene} - ${location}`)
-                        .catch(error => {
-                            console.error("Voice status update failed:", error.message);
-                        });
+                    await voice.setStatus(
+                        `🚨Priority Scene (${location})`
+                    ).catch(error => {
+                        console.error("Voice status update failed:", error.message);
+                    });
                 }
-            }
-
-            const announcementChannel =
-                channelById(interaction.guild, cfg.priorityAnnouncementChannel) ||
-                channelById(interaction.guild, cfg.priorityPanelChannel);
-
-            if (announcementChannel) {
-                await announcementChannel.send(makeV2(
-                    "Priority Scene Started",
-                    `A priority scene has been started at **${location}**.\n\n` +
-                    `**Scene:** ${scene}\n**Started by:** ${interaction.user}\n` +
-                    `**Duration:** ${cfg.priorityDurationMinutes} minutes`
-                )).catch(console.error);
             }
 
             await sendLog(
@@ -2289,18 +2609,14 @@ client.on("interactionCreate", async interaction => {
                 `Priority activated: ${scene} at ${location}. Sending the voice announcement.`
             );
 
-            const announcement =
-                `Attention all units. ${scene} priority active at ${location}. Approach with caution.`;
+            const announcement = scene === "Vehicle Pursuit"
+                ? `Attention all units. Vehicle pursuit active at ${location}. Approach with caution.`
+                : `Attention all units. Hostage scene active at ${location}. Approach with caution.`;
 
             speakInVoiceChannel(announcement).catch(error => {
                 console.error("[PRIORITY VOICE ANNOUNCEMENT FAILED]", error);
             });
 
-            const timer = setTimeout(async () => {
-                await endPriority(interaction.guild, client.user, true);
-            }, cfg.priorityDurationMinutes * 60 * 1000);
-
-            priorityTimers.set(interaction.guildId, timer);
             return;
         }
     } catch (error) {
@@ -2321,7 +2637,9 @@ client.on("interactionCreate", async interaction => {
     }
 });
 
-/* STATUS WEBSITE */
+/* =========================================================
+   STATUS WEBSITE
+========================================================= */
 
 const app = express();
 
@@ -2377,8 +2695,6 @@ app.get("/api/status", (_req, res) => {
         guilds: client.guilds.cache.size,
         uptimeSeconds: Math.floor(process.uptime()),
         sessionActive: activeSessions.size > 0,
-        priorityActive: priorities.size > 0,
-        priorityRequests: priorityRequests.size,
         voiceChannelConfigured: Boolean(cfg.voiceChannel),
         voiceConnected
     });
@@ -2388,7 +2704,9 @@ app.listen(cfg.port, "0.0.0.0", () => {
     console.log(`Status website listening on port ${cfg.port}`);
 });
 
-/* ERROR HANDLING AND STARTUP */
+/* =========================================================
+   ERROR HANDLING AND STARTUP
+========================================================= */
 
 process.on("unhandledRejection", error => {
     console.error("Unhandled rejection:", error);
@@ -2400,34 +2718,12 @@ process.on("uncaughtException", error => {
 
 (async () => {
     try {
-        console.log("----------------------------------------");
         console.log("Starting Texas Operations...");
-        console.log("----------------------------------------");
 
-        console.log("[DISCORD] Authenticating bot...");
-        await client.login(cfg.token);
-        console.log("[DISCORD] Authentication successful.");
-        console.log(`[DISCORD] Logged in as ${client.user.tag}`);
-
-        console.log("[COMMANDS] Registering slash commands...");
         await registerCommands();
-        console.log("[COMMANDS] Slash commands registered successfully.");
-
-        console.log("----------------------------------------");
-        console.log("Texas Operations started successfully.");
-        console.log("----------------------------------------");
+        await client.login(cfg.token);
     } catch (error) {
-        console.error("----------------------------------------");
-        console.error("TEXAS OPERATIONS STARTUP FAILED");
-        console.error("----------------------------------------");
-
-        if (error?.status === 401 || error?.code === 0) {
-            console.error("[AUTHENTICATION] Discord rejected the bot token.");
-            console.error("Check DISCORD_TOKEN or BOT_TOKEN in your hosting environment.");
-            console.error("Use the Bot Token from Discord Developer Portal, not the Client Secret.");
-        } else {
-            console.error("[STARTUP ERROR]", error);
-        }
-        process.exit(1);
+        console.error("Failed to start Texas Operations:", error);
+        process.exitCode = 1;
     }
 })();
