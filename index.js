@@ -6,98 +6,107 @@ const os = require("node:os");
 const path = require("node:path");
 const { execFile } = require("node:child_process");
 const { promisify } = require("node:util");
-
 const {
-    Client, GatewayIntentBits, Partials, PermissionFlagsBits,
-    ChannelType, MessageFlags, ContainerBuilder, TextDisplayBuilder,
-    SeparatorBuilder, SeparatorSpacingSize, MediaGalleryBuilder,
-    MediaGalleryItemBuilder, ActionRowBuilder, ButtonBuilder,
-    ButtonStyle, StringSelectMenuBuilder, ModalBuilder,
-    TextInputBuilder, TextInputStyle, SlashCommandBuilder,
-    REST, Routes, AttachmentBuilder, EmbedBuilder
+    Client,
+    GatewayIntentBits,
+    Partials,
+    Events,
+    REST,
+    Routes,
+    SlashCommandBuilder,
+    PermissionFlagsBits,
+    ChannelType,
+    EmbedBuilder,
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+    StringSelectMenuBuilder,
+    ModalBuilder,
+    TextInputBuilder,
+    TextInputStyle,
+    ContainerBuilder,
+    TextDisplayBuilder,
+    SeparatorBuilder,
+    MediaGalleryBuilder,
+    MediaGalleryItemBuilder,
+    MessageFlags,
+    AttachmentBuilder
 } = require("discord.js");
-
 const {
-    joinVoiceChannel, getVoiceConnection, VoiceConnectionStatus,
-    entersState, createAudioPlayer, createAudioResource,
-    AudioPlayerStatus, NoSubscriberBehavior, StreamType
+    joinVoiceChannel,
+    getVoiceConnection,
+    createAudioPlayer,
+    createAudioResource,
+    AudioPlayerStatus,
+    VoiceConnectionStatus,
+    entersState,
+    StreamType
 } = require("@discordjs/voice");
-
-const execFileAsync = promisify(execFile);
-
-try {
-    const ffmpegPath = require("ffmpeg-static");
-    if (ffmpegPath) {
-        process.env.PATH =
-            `${path.dirname(ffmpegPath)}${path.delimiter}${process.env.PATH || ""}`;
-    }
-} catch (error) {
-    console.warn("Could not load ffmpeg-static:", error.message);
-}
-
-/* CONFIGURATION */
 
 const e = process.env;
 const BRAND = "Texas Operations";
+const PREFIX = e.PREFIX || "$";
+const V2 = MessageFlags.IsComponentsV2;
+const EPHEMERAL = MessageFlags.Ephemeral;
+const execFileAsync = promisify(execFile);
 
 const cfg = {
-    token: e.DISCORD_TOKEN,
-    clientId: e.CLIENT_ID,
-    guildId: e.GUILD_ID,
-    prefix: e.PREFIX || "!",
+    token: (e.DISCORD_TOKEN || e.BOT_TOKEN || "").trim().replace(/^Bot\s+/i, ""),
+    clientId: (e.CLIENT_ID || "").trim(),
+    guildId: (e.GUILD_ID || "").trim(),
 
-    welcomeChannel: e.WELCOME_CHANNEL_ID,
-    welcomeEmoji: e.WELCOME_EMOJI || "",
+    port: Number(e.PORT || 10000),
+    prefix: PREFIX,
 
-    logChannel: e.LOG_CHANNEL_ID,
-    staffLogChannel: e.STAFF_LOG_CHANNEL_ID,
+    ownerId: e.OWNER_ID || "",
+    staffRoleId: e.STAFF_ROLE_ID || "",
+    managementRoleId: e.MANAGEMENT_ROLE_ID || "",
+    adminRoleId: e.ADMIN_ROLE_ID || "",
+    priorityStaffRoleId: e.PRIORITY_STAFF_ROLE_ID || "",
 
-    staffRole: e.STAFF_ROLE_ID,
-    adminRole: e.ADMIN_ROLE_ID,
-    supportRole: e.TICKET_SUPPORT_ROLE_ID,
-    managementRole: e.MANAGEMENT_ROLE_ID,
+    welcomeChannel: e.WELCOME_CHANNEL_ID || "",
+    panelChannel: e.PANEL_CHANNEL_ID || "",
+    ticketCategory: e.TICKET_CATEGORY_ID || "",
+    ticketStaffRole: e.TICKET_STAFF_ROLE_ID || "",
+    ticketLogChannel: e.TICKET_LOG_CHANNEL_ID || "",
+    feedbackChannel: e.FEEDBACK_CHANNEL_ID || "",
+    applicationChannel: e.APPLICATION_CHANNEL_ID || "",
 
-    generalCategory: e.GENERAL_SUPPORT_CATEGORY_ID || e.TICKET_CATEGORY_ID,
-    reportCategory: e.REPORT_TICKETS_CATEGORY_ID,
-    managementCategory: e.MANAGEMENT_SUPPORT_CATEGORY_ID,
-
-    panelChannel: e.TICKET_PANEL_CHANNEL_ID,
-    feedbackChannel: e.FEEDBACK_CHANNEL_ID,
-    applicationChannel: e.APPLICATION_RESULTS_CHANNEL_ID,
-
-    voiceChannel: e.VOICE_CHANNEL_ID,
-    sessionChannel: e.SESSION_VOTE_CHANNEL_ID,
-
-    serverName: e.SESSION_SERVER_NAME || BRAND,
-    serverCode: e.SESSION_SERVER_CODE || "CSRPVOS",
-    gameUrl: e.SESSION_GAME_URL || "",
-    requiredVotes: Math.max(1, Number(e.SESSION_REQUIRED_VOTES || 5)),
-
-    defaultBanner: e.DEFAULT_BANNER_URL || "",
-    ticketBanner: e.TICKET_BANNER_URL || "",
+    sessionChannel: e.SESSION_CHANNEL_ID || "",
+    sessionLogChannel: e.SESSION_LOG_CHANNEL_ID || "",
     sessionBanner: e.SESSION_BANNER_URL || "",
-    priorityBanner: e.PRIORITY_BANNER_URL || "",
-    staffBanner: e.STAFF_BANNER_URL || "",
-    applicationBanner: e.APPLICATION_BANNER_URL || "",
-    feedbackBanner: e.FEEDBACK_BANNER_URL || "",
-    moderationBanner: e.MODERATION_BANNER_URL || "",
-    promotionBanner: e.PROMOTION_BANNER_URL || "",
-    infractionBanner: e.INFRACTION_BANNER_URL || "",
-    logBanner: e.LOG_BANNER_URL || "",
+    sessionRequiredVotes: Number(e.SESSION_REQUIRED_VOTES || 4),
 
     priorityPanelChannel: e.PRIORITY_PANEL_CHANNEL_ID || "",
-    priorityStaffChannel: e.PRIORITY_STAFF_CHANNEL_ID || "",
-    priorityStaffRole: e.PRIORITY_STAFF_ROLE_ID || e.STAFF_ROLE_ID || "",
     priorityAnnouncementChannel: e.PRIORITY_ANNOUNCEMENT_CHANNEL_ID || "",
-    priorityRestrictedZonesUrl: e.PRIORITY_RESTRICTED_ZONES_URL || "",
-    priorityDurationMinutes: Math.max(1, Number(e.PRIORITY_DURATION_MINUTES || 30)),
-    priorityMaxQueue: Math.max(1, Number(e.PRIORITY_MAX_QUEUE || 10)),
+    priorityLogChannel: e.PRIORITY_LOG_CHANNEL_ID || "",
+    priorityDurationMinutes: Number(e.PRIORITY_DURATION_MINUTES || 30),
+    priorityBanner: e.PRIORITY_BANNER_URL || "",
 
-    port: Number(e.PORT || 3000)
+    generalLogChannel: e.GENERAL_LOG_CHANNEL_ID || "",
+    memberLogChannel: e.MEMBER_LOG_CHANNEL_ID || "",
+    moderationLogChannel: e.MODERATION_LOG_CHANNEL_ID || "",
+    messageLogChannel: e.MESSAGE_LOG_CHANNEL_ID || "",
+    roleLogChannel: e.ROLE_LOG_CHANNEL_ID || "",
+    channelLogChannel: e.CHANNEL_LOG_CHANNEL_ID || "",
+    voiceLogChannel: e.VOICE_LOG_CHANNEL_ID || "",
+    serverLogChannel: e.SERVER_LOG_CHANNEL_ID || "",
+    botLogChannel: e.BOT_LOG_CHANNEL_ID || "",
+
+    voiceChannel: e.VOICE_CHANNEL_ID || "",
+    voiceGuildId: e.VOICE_GUILD_ID || "",
+    voiceEnabled: String(e.VOICE_ENABLED || "false").toLowerCase() === "true",
+    voiceDisconnectRoleId: e.VOICE_DISCONNECT_ROLE_ID || "",
+
+    automatedBanner: e.AUTOMATED_BANNER_URL || "",
+    ticketBanner: e.TICKET_BANNER_URL || "",
+    welcomeBanner: e.WELCOME_BANNER_URL || "",
+
+    requiredVotes: Number(e.REQUIRED_VOTES || 4)
 };
 
 if (!cfg.token || !cfg.clientId) {
-    console.error("ERROR: Add DISCORD_TOKEN and CLIENT_ID to your .env file.");
+    console.error("ERROR: Add DISCORD_TOKEN (or BOT_TOKEN) and CLIENT_ID to your .env file.");
     process.exit(1);
 }
 
@@ -106,931 +115,669 @@ const client = new Client({
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMembers,
         GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent,
         GatewayIntentBits.GuildModeration,
-        GatewayIntentBits.GuildVoiceStates
+        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildVoiceStates,
+        GatewayIntentBits.DirectMessages
     ],
-    partials: [Partials.Message, Partials.Channel, Partials.User]
+    partials: [
+        Partials.Channel,
+        Partials.Message,
+        Partials.User,
+        Partials.GuildMember
+    ]
 });
 
+const warnings = new Map();
 const tickets = new Map();
-const claims = new Map();
 const priorities = new Map();
 const priorityRequests = new Map();
 const priorityTimers = new Map();
-const warnings = new Map();
 const sessionVotes = new Map();
 const activeSessions = new Map();
+const ticketCounter = new Map();
+const voicePlayers = new Map();
+const voiceQueues = new Map();
 
-const V2 = MessageFlags.IsComponentsV2;
-const EPHEMERAL = MessageFlags.Ephemeral;
-
-/* AUDIO AND WINDOWS SPEECH */
-
-const speechPlayer = createAudioPlayer({
-    behaviors: { noSubscriber: NoSubscriberBehavior.Pause }
-});
-
-const speechQueue = [];
-let speechQueueRunning = false;
-let voiceJoinInProgress = false;
-
-speechPlayer.on("error", error =>
-    console.error("[VOICE] Audio player error:", error.message)
-);
-
-async function generateWindowsSpeech(text) {
-    const spokenText = String(text || "").trim();
-
-    if (!spokenText) throw new Error("The speech announcement is empty.");
-    if (process.platform !== "win32") {
-        throw new Error("Windows speech requires the bot to run on Windows.");
+const ticketTypes = {
+    general: {
+        label: "General Support",
+        category: "general",
+        description: "Questions and general support"
+    },
+    report: {
+        label: "Report",
+        category: "report",
+        description: "Report a member or an incident"
+    },
+    management: {
+        label: "Management",
+        category: "management",
+        description: "Contact server management"
     }
+};
 
-    const audioPath = path.join(
-        os.tmpdir(),
-        `Texas-speech-${Date.now()}-${Math.random().toString(36).slice(2)}.wav`
+const priorityScenes = [
+    { label: "Bank Robbery", value: "Bank Robbery" },
+    { label: "Jewelry Store Robbery", value: "Jewelry Store Robbery" },
+    { label: "Hostage Situation", value: "Hostage Situation" },
+    { label: "Store Robbery", value: "Store Robbery" },
+    { label: "Other Priority Scene", value: "Other Priority Scene" }
+];
+
+function clean(value, max = 1000) {
+    if (value === null || value === undefined) return "Not provided";
+    return String(value)
+        .replace(/@everyone/gi, "@ everyone")
+        .replace(/@here/gi, "@ here")
+        .slice(0, max);
+}
+
+function isStaff(member) {
+    if (!member) return false;
+
+    if (cfg.ownerId && member.id === cfg.ownerId) return true;
+
+    return Boolean(
+        (cfg.staffRoleId && member.roles?.cache?.has(cfg.staffRoleId)) ||
+        (cfg.managementRoleId && member.roles?.cache?.has(cfg.managementRoleId)) ||
+        (cfg.adminRoleId && member.roles?.cache?.has(cfg.adminRoleId)) ||
+        member.permissions?.has(PermissionFlagsBits.Administrator)
     );
-
-    const encodedText = Buffer.from(spokenText, "utf8").toString("base64");
-    const encodedPath = Buffer.from(audioPath, "utf8").toString("base64");
-
-    const script = `
-$ErrorActionPreference = "Stop"
-Add-Type -AssemblyName System.Speech
-$text = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String("${encodedText}"))
-$outputPath = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String("${encodedPath}"))
-$synth = New-Object System.Speech.Synthesis.SpeechSynthesizer
-try {
-    $synth.Rate = 0
-    $synth.Volume = 100
-    $voices = @($synth.GetInstalledVoices() | Where-Object { $_.Enabled })
-    $preferred = @("Microsoft David Desktop", "Microsoft Mark", "Microsoft Guy Online", "Microsoft Ryan Online")
-    $selected = $null
-    foreach ($name in $preferred) {
-        $match = $voices | Where-Object { $_.VoiceInfo.Name -eq $name } | Select-Object -First 1
-        if ($match) { $selected = $match; break }
-    }
-    if (-not $selected) {
-        $selected = $voices | Where-Object { $_.VoiceInfo.Gender.ToString() -eq "Male" } | Select-Object -First 1
-    }
-    if ($selected) {
-        $synth.SelectVoice($selected.VoiceInfo.Name)
-        Write-Output ("Selected voice: " + $selected.VoiceInfo.Name)
-    } elseif ($voices.Count -gt 0) {
-        $synth.SelectVoice($voices[0].VoiceInfo.Name)
-    } else {
-        throw "No enabled Windows speech voices are installed."
-    }
-    $synth.SetOutputToWaveFile($outputPath)
-    $synth.Speak($text)
-} finally {
-    $synth.Dispose()
-}`;
-
-    const encodedScript = Buffer.from(script, "utf16le").toString("base64");
-
-    try {
-        await execFileAsync("powershell.exe", [
-            "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
-            "-EncodedCommand", encodedScript
-        ], {
-            windowsHide: true,
-            timeout: 60000,
-            maxBuffer: 1024 * 1024
-        });
-
-        const file = await fs.stat(audioPath);
-        if (!file.size) throw new Error("Windows generated an empty audio file.");
-        return audioPath;
-    } catch (error) {
-        await fs.unlink(audioPath).catch(() => {});
-        throw new Error(`Windows speech generation failed: ${error.message}`);
-    }
 }
 
-function waitForPlayerIdle(player, timeoutMs = 120000) {
-    return new Promise((resolve, reject) => {
-        let settled = false;
+function isManagement(member) {
+    if (!member) return false;
 
-        const cleanup = () => {
-            clearTimeout(timer);
-            player.off(AudioPlayerStatus.Idle, onIdle);
-            player.off("error", onError);
-        };
+    if (cfg.ownerId && member.id === cfg.ownerId) return true;
 
-        const finish = error => {
-            if (settled) return;
-            settled = true;
-            cleanup();
-            error ? reject(error) : resolve();
-        };
-
-        const onIdle = () => finish();
-        const onError = error => finish(error);
-        const timer = setTimeout(
-            () => finish(new Error("Voice playback timed out.")),
-            timeoutMs
-        );
-
-        player.on(AudioPlayerStatus.Idle, onIdle);
-        player.on("error", onError);
-    });
+    return Boolean(
+        (cfg.managementRoleId && member.roles?.cache?.has(cfg.managementRoleId)) ||
+        (cfg.adminRoleId && member.roles?.cache?.has(cfg.adminRoleId)) ||
+        member.permissions?.has(PermissionFlagsBits.Administrator)
+    );
 }
 
-async function playSpeech(text) {
-    if (!cfg.voiceChannel) throw new Error("VOICE_CHANNEL_ID is missing.");
+function isPriorityStaff(member) {
+    if (!member) return false;
 
-    const channel = await client.channels.fetch(cfg.voiceChannel).catch(() => null);
-    if (!channel) throw new Error("Configured voice channel was not found.");
+    if (cfg.ownerId && member.id === cfg.ownerId) return true;
 
-    if (
-        channel.type !== ChannelType.GuildVoice &&
-        channel.type !== ChannelType.GuildStageVoice
-    ) {
-        throw new Error("VOICE_CHANNEL_ID must be a voice or stage channel.");
-    }
-
-    let connection = getVoiceConnection(channel.guild.id);
-
-    if (!connection || connection.joinConfig.channelId !== channel.id) {
-        await joinConfiguredVoiceChannel();
-        connection = getVoiceConnection(channel.guild.id);
-    }
-
-    if (!connection) throw new Error("Bot is not connected to the voice channel.");
-
-    await entersState(connection, VoiceConnectionStatus.Ready, 30000);
-
-    const me = await channel.guild.members.fetchMe();
-    const permissions = channel.permissionsFor(me);
-
-    if (!permissions?.has(PermissionFlagsBits.Connect)) {
-        throw new Error("Bot needs Connect permission in the voice channel.");
-    }
-    if (!permissions?.has(PermissionFlagsBits.Speak)) {
-        throw new Error("Bot needs Speak permission in the voice channel.");
-    }
-
-    connection.subscribe(speechPlayer);
-    const audioPath = await generateWindowsSpeech(text);
-
-    try {
-        if (speechPlayer.state.status !== AudioPlayerStatus.Idle) {
-            await waitForPlayerIdle(speechPlayer);
-        }
-
-        const resource = createAudioResource(audioPath, {
-            inputType: StreamType.Arbitrary
-        });
-
-        const finished = waitForPlayerIdle(speechPlayer);
-        speechPlayer.play(resource);
-        await finished;
-    } finally {
-        await fs.unlink(audioPath).catch(() => {});
-    }
-}
-
-async function processSpeechQueue() {
-    if (speechQueueRunning) return;
-    speechQueueRunning = true;
-
-    try {
-        while (speechQueue.length) {
-            const item = speechQueue.shift();
-            try {
-                await playSpeech(item.text);
-                item.resolve?.();
-            } catch (error) {
-                console.error("[SPEECH]", error.message);
-                item.reject?.(error);
-            }
-        }
-    } finally {
-        speechQueueRunning = false;
-        if (speechQueue.length) void processSpeechQueue();
-    }
-}
-
-function speakInVoiceChannel(text) {
-    return new Promise((resolve, reject) => {
-        speechQueue.push({ text: String(text), resolve, reject });
-        void processSpeechQueue();
-    });
-}
-
-/* GENERAL HELPERS AND BANNER SYSTEM */
-
-function validImageUrl(value) {
-    if (!value) return null;
-    try {
-        const url = new URL(value);
-        return ["http:", "https:"].includes(url.protocol) ? url.toString() : null;
-    } catch {
-        return null;
-    }
-}
-
-function bannerForTitle(title) {
-    const value = String(title || "").toLowerCase();
-
-    if (value.includes("priority")) return cfg.priorityBanner;
-    if (value.includes("session")) return cfg.sessionBanner;
-    if (value.includes("ticket") || value.includes("support")) return cfg.ticketBanner;
-    if (value.includes("application")) return cfg.applicationBanner;
-    if (value.includes("feedback")) return cfg.feedbackBanner;
-    if (value.includes("promotion")) return cfg.promotionBanner || cfg.staffBanner;
-    if (value.includes("infraction")) return cfg.infractionBanner || cfg.staffBanner;
-    if (
-        value.includes("moderation") || value.includes("warn") ||
-        value.includes("ban") || value.includes("kick") ||
-        value.includes("timeout") || value.includes("purge")
-    ) return cfg.moderationBanner;
-    if (value.includes("log")) return cfg.logBanner;
-
-    return cfg.defaultBanner;
-}
-
-function makeV2(title, body, rows = [], explicitBanner = null) {
-    const container = new ContainerBuilder();
-    const banner = validImageUrl(explicitBanner || bannerForTitle(title));
-
-    if (banner) {
-        container.addMediaGalleryComponents(
-            new MediaGalleryBuilder().addItems(
-                new MediaGalleryItemBuilder().setURL(banner)
-            )
-        );
-    }
-
-    container
-        .addTextDisplayComponents(
-            new TextDisplayBuilder().setContent(`# ${title}`)
-        )
-        .addSeparatorComponents(
-            new SeparatorBuilder()
-                .setSpacing(SeparatorSpacingSize.Small)
-                .setDivider(true)
-        )
-        .addTextDisplayComponents(
-            new TextDisplayBuilder().setContent(body || "No additional information.")
-        );
-
-    for (const actionRow of rows) {
-        container.addActionRowComponents(actionRow);
-    }
-
-    return {
-        flags: V2,
-        components: [container],
-        allowedMentions: { parse: [] }
-    };
+    return Boolean(
+        (cfg.priorityStaffRoleId && member.roles?.cache?.has(cfg.priorityStaffRoleId)) ||
+        (cfg.managementRoleId && member.roles?.cache?.has(cfg.managementRoleId)) ||
+        (cfg.adminRoleId && member.roles?.cache?.has(cfg.adminRoleId)) ||
+        member.permissions?.has(PermissionFlagsBits.Administrator)
+    );
 }
 
 function row(...components) {
     return new ActionRowBuilder().addComponents(...components);
 }
 
-function button(id, label, style = ButtonStyle.Secondary) {
-    return new ButtonBuilder()
-        .setCustomId(id)
-        .setLabel(label)
-        .setStyle(style);
-}
+function makeV2(title, description, options = {}) {
+    const container = new ContainerBuilder();
 
-function clean(value, max = 1000) {
-    return String(value ?? "")
-        .replace(/\u0000/g, "")
-        .trim()
-        .slice(0, max) || "Not provided";
-}
+    if (options.color) {
+        container.setAccentColor(options.color);
+    } else {
+        container.setAccentColor(0x3498DB);
+    }
 
-function isStaff(member) {
-    return Boolean(
-        member?.permissions?.has(PermissionFlagsBits.Administrator) ||
-        (cfg.staffRole && member?.roles?.cache?.has(cfg.staffRole)) ||
-        (cfg.adminRole && member?.roles?.cache?.has(cfg.adminRole)) ||
-        (cfg.managementRole && member?.roles?.cache?.has(cfg.managementRole))
+    container.addTextDisplayComponents(
+        new TextDisplayBuilder().setContent(`# ${title}\n${description || ""}`)
     );
-}
 
-function isPriorityStaff(member) {
-    return Boolean(
-        isStaff(member) ||
-        (cfg.priorityStaffRole && member?.roles?.cache?.has(cfg.priorityStaffRole))
-    );
-}
+    if (options.banner) {
+        container.addMediaGalleryComponents(
+            new MediaGalleryBuilder().addItems(
+                new MediaGalleryItemBuilder().setURL(options.banner)
+            )
+        );
+    }
 
-function channelById(guild, id) {
-    const channel = id && guild?.channels?.cache?.get(id);
-    return channel?.isTextBased() ? channel : null;
+    if (options.footer) {
+        container.addSeparatorComponents(new SeparatorBuilder());
+        container.addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(`-# ${options.footer}`)
+        );
+    }
+
+    return {
+        components: [container],
+        flags: V2
+    };
 }
 
 async function replyPrivate(interaction, content) {
-    const payload = {
-        content,
-        flags: EPHEMERAL,
-        allowedMentions: { parse: [] }
-    };
+    const payload = typeof content === "string"
+        ? { content, flags: EPHEMERAL }
+        : { ...content, flags: (content.flags || 0) | EPHEMERAL };
 
     if (interaction.replied || interaction.deferred) {
         return interaction.followUp(payload);
     }
+
     return interaction.reply(payload);
 }
 
-async function requireStaff(ctx) {
-    if (isStaff(ctx.member)) return true;
-    await replyPrivate(ctx, "You do not have permission to use this command.");
-    return false;
+function channelById(guild, id) {
+    if (!guild || !id) return null;
+
+    return guild.channels.cache.get(id) || null;
 }
 
-async function sendLog(guild, content, staff = false) {
-    const channel = channelById(
-        guild,
-        staff ? (cfg.staffLogChannel || cfg.logChannel) : cfg.logChannel
-    );
-    if (!channel) return;
+async function sendLog(guild, message, priority = false) {
+    if (!guild) return;
 
-    await channel.send(
-        makeV2(staff ? "Staff Log" : "Server Log", content)
-    ).catch(console.error);
+    const channelId = priority && cfg.priorityLogChannel
+        ? cfg.priorityLogChannel
+        : cfg.generalLogChannel;
+
+    if (!channelId) return;
+
+    const channel = channelById(guild, channelId);
+    if (!channel || !channel.isTextBased()) return;
+
+    await channel.send({
+        content: clean(message, 1900),
+        allowedMentions: { parse: [] }
+    }).catch(error => {
+        console.error("Could not send log:", error.message);
+    });
 }
 
-/* WELCOME MESSAGE */
+async function sendNamedLog(guild, channelId, message) {
+    if (!guild || !channelId) return;
+
+    const channel = channelById(guild, channelId);
+    if (!channel || !channel.isTextBased()) return;
+
+    await channel.send({
+        content: clean(message, 1900),
+        allowedMentions: { parse: [] }
+    }).catch(error => {
+        console.error("Could not send log:", error.message);
+    });
+}
 
 function welcomeMessage(member) {
-    const count = member.guild.memberCount;
-    const emoji = cfg.welcomeEmoji?.trim() || "";
+    const container = new ContainerBuilder()
+        .setAccentColor(0x3498DB)
+        .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(
+                `# Welcome to ${BRAND}\n` +
+                `Welcome ${member}!\n\n` +
+                `Please read the server information and follow all community rules.`
+            )
+        );
 
-    const countButton = new ButtonBuilder()
-        .setCustomId("welcome:membercount")
-        .setLabel(`Members: ${count}`)
-        .setStyle(ButtonStyle.Secondary)
-        .setDisabled(true);
-
-    const supportButton = cfg.panelChannel
-        ? new ButtonBuilder()
-            .setLabel("Support")
-            .setStyle(ButtonStyle.Link)
-            .setURL(`https://discord.com/channels/${member.guild.id}/${cfg.panelChannel}`)
-        : new ButtonBuilder()
-            .setCustomId("welcome:support")
-            .setLabel("Support")
-            .setStyle(ButtonStyle.Secondary);
+    if (cfg.welcomeBanner) {
+        container.addMediaGalleryComponents(
+            new MediaGalleryBuilder().addItems(
+                new MediaGalleryItemBuilder().setURL(cfg.welcomeBanner)
+            )
+        );
+    }
 
     return {
-        content: `${emoji ? `${emoji} ` : ""}Welcome ${member} to **Texas Operations**, you're our ${count} member!`,
-        components: [row(countButton, supportButton)],
-        allowedMentions: { users: [member.id] }
+        components: [container],
+        flags: V2
     };
 }
 
-/* VOICE CONNECTION */
-
-async function joinConfiguredVoiceChannel() {
-    if (voiceJoinInProgress) return getVoiceConnection(cfg.guildId);
-    if (!cfg.voiceChannel) return;
-
-    voiceJoinInProgress = true;
-
-    try {
-        const channel = await client.channels.fetch(cfg.voiceChannel).catch(() => null);
-        if (!channel) throw new Error("Voice channel not found.");
-
-        if (
-            channel.type !== ChannelType.GuildVoice &&
-            channel.type !== ChannelType.GuildStageVoice
-        ) {
-            throw new Error("VOICE_CHANNEL_ID must be a voice or stage channel.");
-        }
-
-        const guild = channel.guild;
-        const me = await guild.members.fetchMe();
-        const permissions = channel.permissionsFor(me);
-
-        if (!permissions?.has(PermissionFlagsBits.Connect)) {
-            throw new Error("Bot is missing Connect permission in voice.");
-        }
-
-        let connection = getVoiceConnection(guild.id);
-
-        if (
-            connection &&
-            connection.joinConfig.channelId === channel.id &&
-            connection.state.status === VoiceConnectionStatus.Ready
-        ) {
-            connection.subscribe(speechPlayer);
-            return connection;
-        }
-
-        if (connection) connection.destroy();
-
-        connection = joinVoiceChannel({
-            channelId: channel.id,
-            guildId: guild.id,
-            adapterCreator: guild.voiceAdapterCreator,
-            selfDeaf: false,
-            selfMute: false
-        });
-
-        connection.on("error", error =>
-            console.error("Voice connection error:", error.message)
+function ticketPanel() {
+    const menu = new StringSelectMenuBuilder()
+        .setCustomId("ticket:create")
+        .setPlaceholder("Select a ticket category")
+        .addOptions(
+            {
+                label: "General Support",
+                value: "general",
+                description: "Questions and general support"
+            },
+            {
+                label: "Report",
+                value: "report",
+                description: "Report a member or incident"
+            },
+            {
+                label: "Management",
+                value: "management",
+                description: "Contact server management"
+            }
         );
 
-        connection.on(VoiceConnectionStatus.Disconnected, async () => {
-            try {
-                await Promise.race([
-                    entersState(connection, VoiceConnectionStatus.Connecting, 5000),
-                    entersState(connection, VoiceConnectionStatus.Signalling, 5000)
-                ]);
-            } catch {
-                try { connection.destroy(); } catch {}
-                setTimeout(() => {
-                    joinConfiguredVoiceChannel().catch(console.error);
-                }, 5000);
-            }
-        });
+    const container = new ContainerBuilder()
+        .setAccentColor(0x3498DB)
+        .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(
+                `# ${BRAND} Support\n` +
+                "Select the appropriate category below to open a support ticket.\n\n" +
+                "**General Support** — General questions and assistance.\n" +
+                "**Report** — Report a member or incident.\n" +
+                "**Management** — Contact the management team."
+            )
+        )
+        .addSeparatorComponents(new SeparatorBuilder())
+        .addActionRowComponents(row(menu));
 
-        await entersState(connection, VoiceConnectionStatus.Ready, 30000);
-        connection.subscribe(speechPlayer);
-        console.log(`Joined voice channel: ${channel.name}`);
-        return connection;
-    } catch (error) {
-        console.error("Voice connection failed:", error.message);
-    } finally {
-        voiceJoinInProgress = false;
-    }
-}
-
-/* SESSION SYSTEM */
-
-function sessionInfo() {
-    return [
-        `**Server Name:** ${cfg.serverName}`,
-        `**Server Code:** ${cfg.serverCode}`,
-        `**Server Link:** ${cfg.gameUrl || "Not configured"}`
-    ].join("\n");
-}
-
-function sessionAnnouncement(title, description, quickJoin = false) {
-    const rows = [];
-
-    if (quickJoin && cfg.gameUrl) {
-        rows.push(row(
-            new ButtonBuilder()
-                .setLabel("Quick Join")
-                .setStyle(ButtonStyle.Link)
-                .setURL(cfg.gameUrl)
-        ));
+    if (cfg.ticketBanner) {
+        container.addMediaGalleryComponents(
+            new MediaGalleryBuilder().addItems(
+                new MediaGalleryItemBuilder().setURL(cfg.ticketBanner)
+            )
+        );
     }
 
-    return makeV2(
-        title,
-        `${description}\n\n## Server Information\n${sessionInfo()}`,
-        rows
-    );
+    return {
+        components: [container],
+        flags: V2
+    };
 }
 
-function voteCounts(guildId) {
-    const state = sessionVotes.get(guildId);
-    let yes = 0;
-    let no = 0;
+function priorityPublicPanel() {
+    const button = new ButtonBuilder()
+        .setCustomId("priority:request")
+        .setLabel("Request Priority")
+        .setStyle(ButtonStyle.Primary);
 
-    if (state) {
-        for (const vote of state.votes.values()) {
-            if (vote === "yes") yes++;
-            if (vote === "no") no++;
-        }
+    const container = new ContainerBuilder()
+        .setAccentColor(0xE67E22)
+        .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(
+                "# Priority Scene Request\n" +
+                "Use the button below to request a priority scene.\n\n" +
+                "Examples include bank robberies, jewelry store robberies, and hostage situations.\n\n" +
+                "A member of the authorized staff team will review your request."
+            )
+        )
+        .addSeparatorComponents(new SeparatorBuilder())
+        .addActionRowComponents(row(button));
+
+    if (cfg.priorityBanner) {
+        container.addMediaGalleryComponents(
+            new MediaGalleryBuilder().addItems(
+                new MediaGalleryItemBuilder().setURL(cfg.priorityBanner)
+            )
+        );
     }
-    return { yes, no };
+
+    return {
+        components: [container],
+        flags: V2
+    };
+}
+
+function priorityPanel() {
+    const menu = new StringSelectMenuBuilder()
+        .setCustomId("priority:choose")
+        .setPlaceholder("Select a priority scene")
+        .addOptions(priorityScenes);
+
+    const container = new ContainerBuilder()
+        .setAccentColor(0xE67E22)
+        .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(
+                "# Priority Management\n" +
+                "Authorized staff can start a priority scene using the selector below.\n\n" +
+                "Starting a priority will announce the scene and start its timer."
+            )
+        )
+        .addSeparatorComponents(new SeparatorBuilder())
+        .addActionRowComponents(row(menu));
+
+    if (cfg.priorityBanner) {
+        container.addMediaGalleryComponents(
+            new MediaGalleryBuilder().addItems(
+                new MediaGalleryItemBuilder().setURL(cfg.priorityBanner)
+            )
+        );
+    }
+
+    return {
+        components: [container],
+        flags: V2
+    };
 }
 
 function votePanel(state) {
-    const counts = voteCounts(state.guildId);
+    const yes = new ButtonBuilder()
+        .setCustomId("session:yes")
+        .setLabel("Yes")
+        .setStyle(ButtonStyle.Success);
 
-    return makeV2(
-        "Session Vote",
-        `A session vote has started for **${cfg.serverName}**.\n\n` +
-        `Vote below if you want a session to begin.\n\n` +
-        `**Required yes votes:** ${state.required}\n` +
-        `**Yes votes:** ${counts.yes}\n` +
-        `**No votes:** ${counts.no}\n\n${sessionInfo()}`,
-        [row(
-            button("session:yes", "Vote Yes", ButtonStyle.Success),
-            button("session:no", "Vote No", ButtonStyle.Danger)
-        )]
-    );
+    const no = new ButtonBuilder()
+        .setCustomId("session:no")
+        .setLabel("No")
+        .setStyle(ButtonStyle.Danger);
+
+    const yesVotes = [...state.votes.values()].filter(vote => vote === "yes").length;
+    const noVotes = [...state.votes.values()].filter(vote => vote === "no").length;
+
+    const container = new ContainerBuilder()
+        .setAccentColor(0x3498DB)
+        .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(
+                "# Session Vote\n" +
+                "A session vote is currently active.\n\n" +
+                `**Required yes votes:** ${state.required}\n` +
+                `**Yes votes:** ${yesVotes}\n` +
+                `**No votes:** ${noVotes}\n\n` +
+                "Select a button below to cast or change your vote."
+            )
+        )
+        .addSeparatorComponents(new SeparatorBuilder())
+        .addActionRowComponents(row(yes, no));
+
+    if (cfg.sessionBanner) {
+        container.addMediaGalleryComponents(
+            new MediaGalleryBuilder().addItems(
+                new MediaGalleryItemBuilder().setURL(cfg.sessionBanner)
+            )
+        );
+    }
+
+    return {
+        components: [container],
+        flags: V2
+    };
 }
 
 async function refreshVote(guildId) {
     const state = sessionVotes.get(guildId);
-    if (!state) return;
+    if (!state || !state.channelId || !state.messageId) return;
 
-    const channel = await client.channels.fetch(state.channelId).catch(() => null);
-    if (!channel?.isTextBased()) return;
+    const guild = client.guilds.cache.get(guildId);
+    if (!guild) return;
+
+    const channel = channelById(guild, state.channelId);
+    if (!channel || !channel.isTextBased()) return;
 
     const message = await channel.messages.fetch(state.messageId).catch(() => null);
-    if (message) await message.edit(votePanel(state)).catch(console.error);
+    if (!message) return;
 
-    const counts = voteCounts(guildId);
+    await message.edit(votePanel(state)).catch(error => {
+        console.error("Could not update session vote:", error.message);
+    });
 
-    if (counts.yes >= state.required && !state.passed) {
+    const yesVotes = [...state.votes.values()].filter(vote => vote === "yes").length;
+
+    if (!state.passed && yesVotes >= state.required) {
         state.passed = true;
 
-        await channel.send(sessionAnnouncement(
+        await channel.send(makeV2(
             "Session Vote Passed",
-            `The vote reached ${counts.yes}/${state.required} yes votes. Staff can now start the session.`,
-            true
-        )).catch(console.error);
+            `The session vote has passed with **${yesVotes} yes votes**.`
+        ));
 
-        await sendLog(channel.guild,
-            `Session vote passed with ${counts.yes}/${state.required} yes votes.`,
-            true
+        await sendNamedLog(
+            guild,
+            cfg.sessionLogChannel,
+            `Session vote passed in ${channel}. Yes votes: ${yesVotes}. Required: ${state.required}.`
         );
     }
 }
 
 async function startSession(guild, user) {
-    const channel = cfg.sessionChannel
-        ? channelById(guild, cfg.sessionChannel)
-        : null;
-    const destination = channel || guild.systemChannel;
-
-    if (!destination) {
-        throw new Error("Configure SESSION_VOTE_CHANNEL_ID or set a system channel.");
+    const channel = channelById(guild, cfg.sessionChannel);
+    if (!channel) {
+        throw new Error("Session announcement channel is not configured.");
     }
 
-    activeSessions.set(guild.id, {
-        startedAt: Date.now(),
-        startedBy: user.id
+    const container = new ContainerBuilder()
+        .setAccentColor(0x2ECC71)
+        .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(
+                `# ${BRAND} Session Started\n` +
+                "The roleplay session is now open.\n\n" +
+                `**Host:** ${user}\n` +
+                `**Started:** <t:${Math.floor(Date.now() / 1000)}:F>`
+            )
+        );
+
+    if (cfg.sessionBanner) {
+        container.addMediaGalleryComponents(
+            new MediaGalleryBuilder().addItems(
+                new MediaGalleryItemBuilder().setURL(cfg.sessionBanner)
+            )
+        );
+    }
+
+    const message = await channel.send({
+        components: [container],
+        flags: V2
     });
 
-    await destination.send(sessionAnnouncement(
-        "Session Started",
-        "The roleplay session is now open. Join the server using the information below.",
-        true
-    ));
+    activeSessions.set(guild.id, {
+        hostId: user.id,
+        startedAt: Date.now(),
+        channelId: channel.id,
+        messageId: message.id
+    });
 
-    const oldVote = sessionVotes.get(guild.id);
-    sessionVotes.delete(guild.id);
-
-    if (oldVote) {
-        const voteChannel = await client.channels.fetch(oldVote.channelId).catch(() => null);
-        if (voteChannel?.isTextBased()) {
-            await voteChannel.send(makeV2(
-                "Session Vote Ended",
-                `A staff member started the session.\n\n${sessionInfo()}`
-            )).catch(() => {});
-        }
-    }
-
-    await sendLog(guild, `Session started by ${user.tag || user.username}.`, true);
+    await sendNamedLog(
+        guild,
+        cfg.sessionLogChannel,
+        `Session started by ${user.tag || user.username}.`
+    );
 }
 
 async function shutdownSession(guild, user) {
+    const channel = channelById(guild, cfg.sessionChannel);
+    if (!channel) {
+        throw new Error("Session announcement channel is not configured.");
+    }
+
+    const session = activeSessions.get(guild.id);
+
+    const container = new ContainerBuilder()
+        .setAccentColor(0xE74C3C)
+        .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(
+                `# ${BRAND} Session Ended\n` +
+                "The roleplay session has been shut down.\n\n" +
+                `**Ended by:** ${user}\n` +
+                `**Ended:** <t:${Math.floor(Date.now() / 1000)}:F>` +
+                (session
+                    ? `\n**Session duration:** ${Math.floor((Date.now() - session.startedAt) / 60000)} minutes`
+                    : "")
+            )
+        );
+
+    if (cfg.sessionBanner) {
+        container.addMediaGalleryComponents(
+            new MediaGalleryBuilder().addItems(
+                new MediaGalleryItemBuilder().setURL(cfg.sessionBanner)
+            )
+        );
+    }
+
+    await channel.send({
+        components: [container],
+        flags: V2
+    });
+
     activeSessions.delete(guild.id);
-    sessionVotes.delete(guild.id);
 
-    const channel = cfg.sessionChannel
-        ? channelById(guild, cfg.sessionChannel)
-        : null;
-    const destination = channel || guild.systemChannel;
-
-    if (!destination) {
-        throw new Error("Configure SESSION_VOTE_CHANNEL_ID or set a system channel.");
-    }
-
-    await destination.send(sessionAnnouncement(
-        "Session Shutdown",
-        "The session is now closed. Thank you to everyone who attended."
-    ));
-
-    await sendLog(guild, `Session shutdown by ${user.tag || user.username}.`, true);
-}
-
-/* TICKETS */
-
-const ticketTypes = {
-    general: {
-        label: "General Support",
-        prefix: "general",
-        category: () => cfg.generalCategory,
-        role: () => cfg.supportRole || cfg.staffRole
-    },
-    report: {
-        label: "Report Tickets",
-        prefix: "report",
-        category: () => cfg.reportCategory,
-        role: () => cfg.staffRole
-    },
-    management: {
-        label: "Management Support",
-        prefix: "management",
-        category: () => cfg.managementCategory,
-        role: () => cfg.managementRole || cfg.adminRole
-    }
-};
-
-function ticketPanel() {
-    return makeV2(
-        "Texas Operations | Support Tickets",
-        "Choose a department below to open a private ticket.\n\n" +
-        "**General Support** — General questions and help.\n" +
-        "**Report Tickets** — Report a player or incident.\n" +
-        "**Management Support** — Management matters.",
-        [row(
-            new StringSelectMenuBuilder()
-                .setCustomId("ticket:create")
-                .setPlaceholder("Choose a ticket category")
-                .addOptions(
-                    { label: "General Support", value: "general" },
-                    { label: "Report Tickets", value: "report" },
-                    { label: "Management Support", value: "management" }
-                )
-        )]
+    await sendNamedLog(
+        guild,
+        cfg.sessionLogChannel,
+        `Session shut down by ${user.tag || user.username}.`
     );
 }
 
-function ticketChannelName(prefix, username) {
-    const safeName = String(username)
-        .toLowerCase()
-        .replace(/[^a-z0-9-]/g, "-")
-        .replace(/-+/g, "-")
-        .replace(/^-|-$/g, "") || "user";
-    return `${prefix}-${safeName}`.slice(0, 100);
-}
-
-function findTicketKey(guildId, channelId) {
-    for (const [key, id] of tickets) {
-        if (key.startsWith(`${guildId}:`) && id === channelId) return key;
-    }
-
-    const channel = client.channels.cache.get(channelId);
-
-    if (channel?.topic?.startsWith("sunshine-ticket:")) {
-        const parts = channel.topic.split(":");
-        if (parts.length >= 4 && parts[1] === guildId) {
-            return `${parts[1]}:${parts[2]}:${parts[3]}`;
-        }
-    }
-    return null;
-}
-
-async function createTicket(interaction, type, inquiry = "No inquiry provided.") {
-    const guild = interaction.guild;
-    const user = interaction.user;
+async function createTicket(interaction, type, inquiry) {
     const info = ticketTypes[type];
+    if (!info) {
+        return replyPrivate(interaction, "Invalid ticket category.");
+    }
 
-    if (!info) return replyPrivate(interaction, "Unknown ticket type.");
-
-    const key = `${guild.id}:${user.id}:${type}`;
-    const oldId = tickets.get(key);
-    const oldChannel = oldId ? guild.channels.cache.get(oldId) : null;
-
-    if (oldChannel) {
-        return replyPrivate(interaction, `You already have a ticket: ${oldChannel}`);
+    const guild = interaction.guild;
+    if (!guild) {
+        return replyPrivate(interaction, "Tickets can only be opened in a server.");
     }
 
     const existing = guild.channels.cache.find(channel =>
-        channel.topic === `sunshine-ticket:${guild.id}:${user.id}:${type}`
+        channel.type === ChannelType.GuildText &&
+        channel.topic?.includes(`ticket-owner:${interaction.user.id}`)
     );
 
     if (existing) {
-        tickets.set(key, existing.id);
-        return replyPrivate(interaction, `You already have a ticket: ${existing}`);
-    }
-
-    const categoryId = info.category();
-
-    if (!categoryId || !guild.channels.cache.has(categoryId)) {
         return replyPrivate(
             interaction,
-            `The ${info.label} category ID is missing or invalid in .env.`
+            `You already have an open ticket: ${existing}`
         );
     }
 
-    const overwrites = [
-        {
-            id: guild.roles.everyone.id,
-            deny: [PermissionFlagsBits.ViewChannel]
-        },
-        {
-            id: user.id,
-            allow: [
-                PermissionFlagsBits.ViewChannel,
-                PermissionFlagsBits.SendMessages,
-                PermissionFlagsBits.ReadMessageHistory,
-                PermissionFlagsBits.AttachFiles
-            ]
-        },
-        {
-            id: client.user.id,
-            allow: [
-                PermissionFlagsBits.ViewChannel,
-                PermissionFlagsBits.SendMessages,
-                PermissionFlagsBits.ReadMessageHistory,
-                PermissionFlagsBits.ManageChannels,
-                PermissionFlagsBits.AttachFiles
-            ]
+    const counter = (ticketCounter.get(guild.id) || 0) + 1;
+    ticketCounter.set(guild.id, counter);
+
+    const safeName = interaction.user.username
+        .toLowerCase()
+        .replace(/[^a-z0-9-]/g, "")
+        .slice(0, 18) || "member";
+
+    const channel = await guild.channels.create({
+        name: `${type}-${safeName}-${counter}`,
+        type: ChannelType.GuildText,
+        parent: cfg.ticketCategory || null,
+        topic: `ticket-owner:${interaction.user.id}; ticket-type:${type}`,
+        permissionOverwrites: [
+            {
+                id: guild.roles.everyone.id,
+                deny: [PermissionFlagsBits.ViewChannel]
+            },
+            {
+                id: interaction.user.id,
+                allow: [
+                    PermissionFlagsBits.ViewChannel,
+                    PermissionFlagsBits.SendMessages,
+                    PermissionFlagsBits.ReadMessageHistory,
+                    PermissionFlagsBits.AttachFiles
+                ]
+            },
+            ...(cfg.ticketStaffRole
+                ? [{
+                    id: cfg.ticketStaffRole,
+                    allow: [
+                        PermissionFlagsBits.ViewChannel,
+                        PermissionFlagsBits.SendMessages,
+                        PermissionFlagsBits.ReadMessageHistory,
+                        PermissionFlagsBits.ManageMessages
+                    ]
+                }]
+                : [])
+        ]
+    });
+
+    tickets.set(channel.id, {
+        ownerId: interaction.user.id,
+        type,
+        createdAt: Date.now(),
+        claimedBy: null
+    });
+
+    const claim = new ButtonBuilder()
+        .setCustomId("ticket:claim")
+        .setLabel("Claim Ticket")
+        .setStyle(ButtonStyle.Primary);
+
+    const close = new ButtonBuilder()
+        .setCustomId("ticket:close")
+        .setLabel("Close Ticket")
+        .setStyle(ButtonStyle.Danger);
+
+    const container = new ContainerBuilder()
+        .setAccentColor(0x3498DB)
+        .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(
+                `# ${info.label}\n` +
+                `Hello ${interaction.user}, your ticket has been created.\n\n` +
+                `**Category:** ${info.label}\n` +
+                `**Inquiry:** ${inquiry}\n\n` +
+                "A staff member will assist you as soon as possible."
+            )
+        )
+        .addSeparatorComponents(new SeparatorBuilder())
+        .addActionRowComponents(row(claim, close));
+
+    if (cfg.ticketBanner) {
+        container.addMediaGalleryComponents(
+            new MediaGalleryBuilder().addItems(
+                new MediaGalleryItemBuilder().setURL(cfg.ticketBanner)
+            )
+        );
+    }
+
+    await channel.send({
+        content: cfg.ticketStaffRole ? `<@&${cfg.ticketStaffRole}>` : "",
+        components: [container],
+        flags: V2,
+        allowedMentions: {
+            roles: cfg.ticketStaffRole ? [cfg.ticketStaffRole] : []
         }
-    ];
+    });
 
-    const staffRole = info.role();
+    await sendNamedLog(
+        guild,
+        cfg.ticketLogChannel,
+        `Ticket created: ${channel} by ${interaction.user.tag}. Category: ${info.label}.`
+    );
 
-    if (staffRole && guild.roles.cache.has(staffRole)) {
-        overwrites.push({
-            id: staffRole,
-            allow: [
-                PermissionFlagsBits.ViewChannel,
-                PermissionFlagsBits.SendMessages,
-                PermissionFlagsBits.ReadMessageHistory,
-                PermissionFlagsBits.AttachFiles
-            ]
-        });
-    }
-
-    try {
-        const channel = await guild.channels.create({
-            name: ticketChannelName(info.prefix, user.username),
-            type: ChannelType.GuildText,
-            parent: categoryId,
-            topic: `sunshine-ticket:${guild.id}:${user.id}:${type}`,
-            permissionOverwrites: overwrites,
-            reason: `${info.label} ticket opened by ${user.tag}`
-        });
-
-        tickets.set(key, channel.id);
-
-        await channel.send(makeV2(
-            info.label,
-            `Welcome ${user}!\n\nPlease explain your request and include any relevant details.\n\n` +
-            `**Opened by:** ${user.tag}\n**Department:** ${info.label}\n` +
-            `**Inquiry:**\n${clean(inquiry, 1500)}`,
-            [row(
-                button("ticket:claim", "Claim Ticket"),
-                button("ticket:close", "Close Ticket", ButtonStyle.Danger)
-            )]
-        ));
-
-        await replyPrivate(interaction, `Your ticket has been created: ${channel}`);
-
-        await sendLog(
-            guild,
-            `Ticket created: ${channel}\nDepartment: ${info.label}\nOpened by: ${user.tag} (${user.id})`,
-            true
-        );
-    } catch (error) {
-        console.error("Ticket creation failed:", error);
-        await replyPrivate(
-            interaction,
-            "Ticket creation failed. Check the category ID and the bot's Manage Channels permission."
-        );
-    }
+    return replyPrivate(
+        interaction,
+        `Your ticket has been created: ${channel}`
+    );
 }
 
 async function claimTicket(interaction) {
+    const channel = interaction.channel;
+    const ticket = tickets.get(channel.id);
+
+    if (!ticket) {
+        return replyPrivate(interaction, "This channel is not an active ticket.");
+    }
+
     if (!isStaff(interaction.member)) {
-        return replyPrivate(interaction, "Only staff can claim tickets.");
+        return replyPrivate(interaction, "Only staff members can claim tickets.");
     }
 
-    if (!findTicketKey(interaction.guildId, interaction.channelId)) {
-        return replyPrivate(interaction, "This is not a recognized ticket channel.");
+    if (ticket.claimedBy) {
+        return replyPrivate(
+            interaction,
+            `This ticket has already been claimed by <@${ticket.claimedBy}>.`
+        );
     }
 
-    claims.set(interaction.channelId, interaction.user.id);
+    ticket.claimedBy = interaction.user.id;
 
-    await interaction.channel.send(makeV2(
-        "Ticket Claimed",
-        `This ticket is now being handled by ${interaction.user}.`
-    ));
-
-    await replyPrivate(interaction, "Ticket claimed.");
-    await sendLog(interaction.guild, `${interaction.user.tag} claimed ${interaction.channel}.`, true);
-}
-
-async function makeTicketTranscript(channel, closingUser, reason) {
-    const messages = [];
-    let before;
-
-    for (let page = 0; page < 10; page++) {
-        const batch = await channel.messages.fetch({
-            limit: 100,
-            ...(before ? { before } : {})
-        }).catch(error => {
-            console.error("Transcript fetch failed:", error.message);
-            return null;
-        });
-
-        if (!batch?.size) break;
-        messages.push(...batch.values());
-        before = batch.last().id;
-        if (batch.size < 100) break;
-    }
-
-    messages.sort((a, b) => a.createdTimestamp - b.createdTimestamp);
-
-    const lines = [
-        "Texas OPERATIONS - TICKET TRANSCRIPT",
-        `Server: ${channel.guild.name} (${channel.guild.id})`,
-        `Channel: #${channel.name} (${channel.id})`,
-        `Closed by: ${closingUser.tag || closingUser.username} (${closingUser.id})`,
-        `Closure reason: ${reason}`,
-        `Generated: ${new Date().toISOString()}`,
-        `Messages included: ${messages.length}`,
-        "=".repeat(70),
-        ""
-    ];
-
-    for (const message of messages) {
-        const timestamp = new Date(message.createdTimestamp).toISOString();
-        const author = message.author
-            ? `${message.author.tag || message.author.username} (${message.author.id})`
-            : "Unknown user";
-
-        let content = message.content || "";
-        if (message.embeds?.length) content += `\n[Embeds: ${message.embeds.length}]`;
-        if (message.attachments?.size) {
-            content += "\nAttachments:\n" +
-                message.attachments.map(a => a.url).join("\n");
-        }
-        if (message.stickers?.size) {
-            content += "\n[Stickers: " +
-                message.stickers.map(s => s.name).join(", ") + "]";
-        }
-
-        lines.push(`[${timestamp}] ${author}`);
-        lines.push(content.trim() || "[No text content]");
-        lines.push("-".repeat(50));
-    }
-
-    return Buffer.from(lines.join("\n"), "utf8");
-}
-
-async function closeTicketChannel(channel, closingUser, reason) {
-    const key = findTicketKey(channel.guild.id, channel.id);
-    if (!key) throw new Error("This is not a recognized ticket channel.");
-
-    const ownerId = key.split(":")[1];
-    const closureReason = clean(reason, 1000);
-    const transcript = await makeTicketTranscript(channel, closingUser, closureReason);
-
-    const attachment = new AttachmentBuilder(transcript, {
-        name: `ticket-${channel.id}-transcript.txt`,
-        description: "Ticket transcript"
+    await channel.send({
+        content: `This ticket has been claimed by ${interaction.user}.`,
+        allowedMentions: { users: [interaction.user.id] }
     });
 
-    let dmSent = false;
-
-    try {
-        const owner = await client.users.fetch(ownerId);
-        await owner.send({
-            content:
-                `Your ticket **#${channel.name}** has been closed.\n` +
-                `**Closed by:** ${closingUser.tag || closingUser.username}\n` +
-                `**Reason:** ${closureReason}\n\nYour transcript is attached.`,
-            files: [attachment],
-            allowedMentions: { parse: [] }
-        });
-        dmSent = true;
-    } catch (error) {
-        console.error("Could not DM ticket transcript:", error.message);
-    }
-
-    await sendLog(
-        channel.guild,
-        `**Ticket closed:** #${channel.name}\n**Ticket owner:** <@${ownerId}> (${ownerId})\n` +
-        `**Closed by:** ${closingUser.tag || closingUser.username} (${closingUser.id})\n` +
-        `**Reason:** ${closureReason}\n**Transcript DM:** ${dmSent ? "Sent" : "Could not deliver"}`,
-        true
+    await sendNamedLog(
+        interaction.guild,
+        cfg.ticketLogChannel,
+        `Ticket ${channel.name} claimed by ${interaction.user.tag}.`
     );
 
-    tickets.delete(key);
-    claims.delete(channel.id);
-
-    await channel.send(makeV2(
-        "Ticket Closed",
-        `**Closed by:** ${closingUser}\n**Reason:** ${closureReason}\n` +
-        `**Transcript DM:** ${dmSent ? "Sent to the ticket owner." : "Could not DM the owner."}\n\n` +
-        "This channel will be deleted shortly."
-    )).catch(() => {});
-
-    setTimeout(() => {
-        channel.delete(`Ticket closed by ${closingUser.tag || closingUser.username}`)
-            .catch(console.error);
-    }, 3000);
-
-    return { dmSent };
+    return replyPrivate(interaction, "You have claimed this ticket.");
 }
 
 async function closeTicket(interaction) {
-    const key = findTicketKey(interaction.guildId, interaction.channelId);
-    if (!key) return replyPrivate(interaction, "This is not a recognized ticket.");
+    const channel = interaction.channel;
+    const ticket = tickets.get(channel.id);
 
-    const ownerId = key.split(":")[1];
+    if (!ticket) {
+        return replyPrivate(interaction, "This channel is not an active ticket.");
+    }
 
-    if (ownerId !== interaction.user.id && !isStaff(interaction.member)) {
+    if (
+        interaction.user.id !== ticket.ownerId &&
+        !isStaff(interaction.member)
+    ) {
         return replyPrivate(interaction, "Only the ticket owner or staff can close this ticket.");
     }
 
@@ -1038,448 +785,325 @@ async function closeTicket(interaction) {
         .setCustomId("ticket:close:reason")
         .setTitle("Close Ticket");
 
-    const reasonInput = new TextInputBuilder()
+    const reason = new TextInputBuilder()
         .setCustomId("reason")
         .setLabel("Reason for closing")
-        .setPlaceholder("Explain why this ticket is being closed")
-        .setStyle(TextInputStyle.Paragraph)
-        .setMaxLength(1000)
+        .setPlaceholder("Enter a short closing reason")
+        .setStyle(TextInputStyle.Short)
+        .setMaxLength(300)
         .setRequired(true);
 
-    modal.addComponents(row(reasonInput));
+    modal.addComponents(row(reason));
     return interaction.showModal(modal);
 }
 
 async function submitTicketClosure(interaction) {
     const channel = interaction.channel;
-    const key = findTicketKey(interaction.guildId, channel.id);
+    const ticket = tickets.get(channel.id);
 
-    if (!key) return replyPrivate(interaction, "This ticket is no longer recognized.");
+    if (!ticket) {
+        return replyPrivate(interaction, "This ticket is no longer active.");
+    }
 
-    const ownerId = key.split(":")[1];
-
-    if (ownerId !== interaction.user.id && !isStaff(interaction.member)) {
+    if (
+        interaction.user.id !== ticket.ownerId &&
+        !isStaff(interaction.member)
+    ) {
         return replyPrivate(interaction, "Only the ticket owner or staff can close this ticket.");
     }
 
-    const reason = clean(interaction.fields.getTextInputValue("reason"), 1000);
-    await replyPrivate(interaction, "Closing ticket and generating transcript...");
-
-    try {
-        const result = await closeTicketChannel(channel, interaction.user, reason);
-
-        if (!result.dmSent) {
-            await interaction.followUp({
-                content: "Ticket closed, but the transcript DM could not be delivered.",
-                flags: EPHEMERAL
-            }).catch(() => {});
-        }
-    } catch (error) {
-        console.error("Ticket closure failed:", error);
-        await interaction.followUp({
-            content: `Ticket closure failed: ${error.message}`,
-            flags: EPHEMERAL
-        }).catch(() => {});
-    }
-}
-
-/* PRIORITY SYSTEM - PUBLIC REQUEST PANEL AND STAFF QUEUE */
-
-function priorityPublicPanel() {
-    const restrictedText = cfg.priorityRestrictedZonesUrl
-        ? `[Restricted Roleplay Zones](${cfg.priorityRestrictedZonesUrl})`
-        : "**Restricted Roleplay Zones**";
-
-    return makeV2(
-        "Priorities & Permissions",
-        "Plan your scene, request staff approval, and follow your place in the priority queue. " +
-        "Use **Request Priority** to get started; we’ll DM you when it’s your turn. " +
-        `Before choosing a location, review ${restrictedText}.`,
-        [row(
-            button("priority:request", "Request Priority", ButtonStyle.Primary)
-        )]
+    const reason = clean(
+        interaction.fields.getTextInputValue("reason"),
+        300
     );
-}
 
-function priorityPanel() {
-    return makeV2(
-        "Priority Scene Control",
-        "Staff controls for manually activating a priority scene. Choose a scene type, then enter its location.",
-        [row(
-            new StringSelectMenuBuilder()
-                .setCustomId("priority:choose")
-                .setPlaceholder("Choose a priority scene")
-                .addOptions(
-                    { label: "Vehicle Pursuit", value: "Vehicle Pursuit" },
-                    { label: "Hostage Scene", value: "Hostage Scene" },
-                    { label: "Bank Robbery", value: "Bank Robbery" },
-                    { label: "Jewelry Store Robbery", value: "Jewelry Store Robbery" }
-                )
-        )]
+    await replyPrivate(interaction, "Ticket is being closed.");
+
+    await sendNamedLog(
+        interaction.guild,
+        cfg.ticketLogChannel,
+        `Ticket closed: ${channel.name}. Owner: ${ticket.ownerId}. Closed by: ${interaction.user.tag}. Reason: ${reason}`
     );
-}
 
-function priorityQueuePosition(request) {
-    const approved = [...priorityRequests.values()]
-        .filter(item =>
-            item.guildId === request.guildId &&
-            item.status === "Approved"
-        )
-        .sort((a, b) => a.approvedAt - b.approvedAt);
+    tickets.delete(channel.id);
 
-    return approved.findIndex(item => item.id === request.id) + 1;
-}
-
-function priorityRequestCard(request) {
-    const position = request.status === "Approved"
-        ? priorityQueuePosition(request)
-        : null;
-
-    const body =
-        `**Request ID:** ${request.id}\n` +
-        `**Requester:** <@${request.userId}>\n` +
-        `**Scene:** ${request.scene}\n` +
-        `**Location:** ${request.location}\n` +
-        `**Details:** ${request.details}\n\n` +
-        `**Status:** ${request.status}` +
-        (position ? `\n**Queue position:** ${position}` : "");
-
-    let controls = [];
-
-    if (request.status === "Pending") {
-        controls = [
-            button(`priority:approve:${request.id}`, "Approve", ButtonStyle.Success),
-            button(`priority:deny:${request.id}`, "Deny", ButtonStyle.Danger)
-        ];
-    } else if (request.status === "Approved") {
-        controls = [
-            button(`priority:start:${request.id}`, "Start Scene", ButtonStyle.Primary),
-            button(`priority:deny:${request.id}`, "Cancel Request", ButtonStyle.Danger)
-        ];
-    }
-
-    return makeV2(
-        "Priority Request",
-        body,
-        controls.length ? [row(...controls)] : []
-    );
-}
-
-async function updatePriorityRequestMessage(request) {
-    if (!request.staffChannelId || !request.staffMessageId) return;
-
-    const channel = await client.channels.fetch(request.staffChannelId).catch(() => null);
-    if (!channel?.isTextBased()) return;
-
-    const message = await channel.messages.fetch(request.staffMessageId).catch(() => null);
-    if (message) {
-        await message.edit(priorityRequestCard(request)).catch(console.error);
-    }
-}
-
-async function dmPriorityUser(request, content) {
-    try {
-        const user = await client.users.fetch(request.userId);
-        await user.send({
-            content,
-            allowedMentions: { parse: [] }
-        });
-    } catch (error) {
-        console.warn(`Could not DM priority requester ${request.userId}:`, error.message);
-    }
+    await channel.delete(`Ticket closed by ${interaction.user.tag}: ${reason}`)
+        .catch(error => console.error("Ticket deletion failed:", error));
 }
 
 async function submitPriorityRequest(interaction) {
-    const staffChannel = channelById(
-        interaction.guild,
-        cfg.priorityStaffChannel
+    const scene = clean(
+        interaction.fields.getTextInputValue("scene"),
+        100
     );
 
-    if (!staffChannel) {
-        return replyPrivate(
-            interaction,
-            "Priority staff channel is not configured. Ask an administrator to set PRIORITY_STAFF_CHANNEL_ID."
-        );
-    }
-
-    const existing = [...priorityRequests.values()].find(request =>
-        request.guildId === interaction.guildId &&
-        request.userId === interaction.user.id &&
-        ["Pending", "Approved"].includes(request.status)
+    const location = clean(
+        interaction.fields.getTextInputValue("location"),
+        150
     );
 
-    if (existing) {
-        return replyPrivate(
-            interaction,
-            `You already have an active priority request. Current status: ${existing.status}.`
-        );
-    }
+    const details = clean(
+        interaction.fields.getTextInputValue("details"),
+        800
+    );
 
-    const pendingCount = [...priorityRequests.values()].filter(request =>
-        request.guildId === interaction.guildId &&
-        ["Pending", "Approved"].includes(request.status)
-    ).length;
-
-    if (pendingCount >= cfg.priorityMaxQueue) {
-        return replyPrivate(interaction, "The priority request queue is currently full.");
-    }
+    const id = `${Date.now()}-${interaction.user.id}`;
 
     const request = {
-        id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+        id,
         guildId: interaction.guildId,
         userId: interaction.user.id,
-        scene: clean(interaction.fields.getTextInputValue("scene"), 100),
-        location: clean(interaction.fields.getTextInputValue("location"), 150),
-        details: clean(interaction.fields.getTextInputValue("details"), 800),
-        status: "Pending",
+        scene,
+        location,
+        details,
         createdAt: Date.now(),
-        approvedAt: null,
-        staffChannelId: staffChannel.id,
-        staffMessageId: null
+        status: "pending"
     };
 
-    priorityRequests.set(request.id, request);
+    priorityRequests.set(id, request);
 
-    try {
-        const payload = priorityRequestCard(request);
+    const approve = new ButtonBuilder()
+        .setCustomId(`priority:approve:${id}`)
+        .setLabel("Approve")
+        .setStyle(ButtonStyle.Success);
 
-       if (cfg.priorityStaffRole) {
-    payload.components[0].addTextDisplayComponents(
-        new TextDisplayBuilder().setContent(`<@&${cfg.priorityStaffRole}>`)
-    );
-    payload.allowedMentions = {
-        parse: [],
-        roles: [cfg.priorityStaffRole]
-    };
-}
-        
+    const deny = new ButtonBuilder()
+        .setCustomId(`priority:deny:${id}`)
+        .setLabel("Deny")
+        .setStyle(ButtonStyle.Danger);
 
-        const message = await staffChannel.send(payload);
-        request.staffMessageId = message.id;
+    const container = new ContainerBuilder()
+        .setAccentColor(0xE67E22)
+        .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(
+                "# New Priority Request\n" +
+                `**Requested by:** <@${interaction.user.id}>\n` +
+                `**Scene:** ${scene}\n` +
+                `**Location:** ${location}\n` +
+                `**Details:** ${details}\n` +
+                `**Status:** Pending review`
+            )
+        )
+        .addSeparatorComponents(new SeparatorBuilder())
+        .addActionRowComponents(row(approve, deny));
 
-        await replyPrivate(
+    const destination =
+        channelById(interaction.guild, cfg.priorityAnnouncementChannel) ||
+        channelById(interaction.guild, cfg.priorityPanelChannel);
+
+    if (!destination) {
+        priorityRequests.delete(id);
+        return replyPrivate(
             interaction,
-            "Your priority request has been submitted. Staff will review it and DM you with an update."
+            "The priority request channel is not configured. Contact an administrator."
         );
-
-        await sendLog(
-            interaction.guild,
-            `Priority request ${request.id} submitted by ${interaction.user.tag}. Scene: ${request.scene}. Location: ${request.location}.`,
-            true
-        );
-    } catch (error) {
-        priorityRequests.delete(request.id);
-        console.error("Priority request submission failed:", error);
-        await replyPrivate(interaction, "Could not submit your request. Please contact staff.");
     }
+
+    const sent = await destination.send({
+        components: [container],
+        flags: V2
+    });
+
+    request.messageId = sent.id;
+    request.channelId = destination.id;
+
+    await sendLog(
+        interaction.guild,
+        `Priority request submitted by ${interaction.user.tag}: ${scene} at ${location}.`,
+        true
+    );
+
+    return replyPrivate(
+        interaction,
+        "Your priority request has been submitted for staff review."
+    );
 }
 
 async function approvePriorityRequest(interaction, request) {
     if (!isPriorityStaff(interaction.member)) {
-        return replyPrivate(interaction, "Only authorized staff can approve priority requests.");
+        return replyPrivate(interaction, "You are not authorized to approve priority requests.");
     }
 
-    if (request.status !== "Pending") {
+    if (request.status !== "pending") {
         return replyPrivate(interaction, "This request has already been reviewed.");
     }
 
-    request.status = "Approved";
-    request.approvedAt = Date.now();
+    request.status = "approved";
+    request.approvedBy = interaction.user.id;
 
-    await updatePriorityRequestMessage(request);
+    const container = new ContainerBuilder()
+        .setAccentColor(0x2ECC71)
+        .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(
+                "# Priority Request Approved\n" +
+                `**Scene:** ${request.scene}\n` +
+                `**Location:** ${request.location}\n` +
+                `**Requested by:** <@${request.userId}>\n` +
+                `**Approved by:** ${interaction.user}\n\n` +
+                "Staff may now start this priority scene."
+            )
+        )
+        .addSeparatorComponents(new SeparatorBuilder())
+        .addActionRowComponents(row(
+            new ButtonBuilder()
+                .setCustomId(`priority:start:${request.id}`)
+                .setLabel("Start Priority")
+                .setStyle(ButtonStyle.Success)
+        ));
 
-    const position = priorityQueuePosition(request);
-
-    await dmPriorityUser(
-        request,
-        `Your priority request for **${request.scene}** at **${request.location}** has been approved.\n` +
-        `Your current queue position is **${position}**. Staff will notify you when the scene is ready to start.`
-    );
-
-    await replyPrivate(interaction, `Request approved. Queue position: ${position}.`);
+    await interaction.message.edit({
+        components: [container],
+        flags: V2
+    });
 
     await sendLog(
         interaction.guild,
-        `Priority request ${request.id} approved by ${interaction.user.tag}. Queue position: ${position}.`,
+        `Priority request ${request.id} approved by ${interaction.user.tag}.`,
         true
     );
+
+    return replyPrivate(interaction, "Priority request approved.");
 }
 
 async function denyPriorityRequest(interaction, request) {
     if (!isPriorityStaff(interaction.member)) {
-        return replyPrivate(interaction, "Only authorized staff can deny priority requests.");
+        return replyPrivate(interaction, "You are not authorized to deny priority requests.");
     }
 
-    if (!["Pending", "Approved"].includes(request.status)) {
-        return replyPrivate(interaction, "This request is already closed.");
+    if (request.status !== "pending") {
+        return replyPrivate(interaction, "This request has already been reviewed.");
     }
 
-    request.status = "Denied";
+    request.status = "denied";
     request.deniedBy = interaction.user.id;
 
-    await updatePriorityRequestMessage(request);
+    const container = new ContainerBuilder()
+        .setAccentColor(0xE74C3C)
+        .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(
+                "# Priority Request Denied\n" +
+                `**Scene:** ${request.scene}\n` +
+                `**Location:** ${request.location}\n` +
+                `**Requested by:** <@${request.userId}>\n` +
+                `**Denied by:** ${interaction.user}`
+            )
+        );
 
-    await dmPriorityUser(
-        request,
-        `Your priority request for **${request.scene}** at **${request.location}** was not approved or has been cancelled. Please contact staff if you need more information.`
-    );
-
-    await replyPrivate(interaction, "Priority request denied/cancelled.");
+    await interaction.message.edit({
+        components: [container],
+        flags: V2
+    });
 
     await sendLog(
         interaction.guild,
-        `Priority request ${request.id} denied/cancelled by ${interaction.user.tag}.`,
+        `Priority request ${request.id} denied by ${interaction.user.tag}.`,
         true
     );
+
+    return replyPrivate(interaction, "Priority request denied.");
 }
 
-async function announcePriorityStart(guild, request) {
-    const channel =
-        channelById(guild, cfg.priorityAnnouncementChannel) ||
-        channelById(guild, cfg.priorityPanelChannel) ||
-        guild.systemChannel;
+async function startPriorityRequest(interaction, request) {
+    if (!isPriorityStaff(interaction.member)) {
+        return replyPrivate(interaction, "You are not authorized to start priority scenes.");
+    }
 
+    if (request.status !== "approved") {
+        return replyPrivate(interaction, "This request has not been approved.");
+    }
+
+    if (priorities.has(interaction.guildId)) {
+        return replyPrivate(interaction, "A priority scene is already active.");
+    }
+
+    request.status = "started";
+
+    priorities.set(interaction.guildId, {
+        scene: request.scene,
+        location: request.location,
+        userId: interaction.user.id,
+        startedAt: Date.now(),
+        requestId: request.id
+    });
+
+    await announcePriorityStart(interaction.guild, request, interaction.user);
+
+    const timer = setTimeout(async () => {
+        await endPriority(interaction.guild, client.user, true);
+    }, cfg.priorityDurationMinutes * 60 * 1000);
+
+    priorityTimers.set(interaction.guildId, timer);
+
+    const container = new ContainerBuilder()
+        .setAccentColor(0x2ECC71)
+        .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(
+                "# Priority Started\n" +
+                `**Scene:** ${request.scene}\n` +
+                `**Location:** ${request.location}\n` +
+                `**Started by:** ${interaction.user}\n` +
+                `**Duration:** ${cfg.priorityDurationMinutes} minutes`
+            )
+        );
+
+    await interaction.message.edit({
+        components: [container],
+        flags: V2
+    });
+
+    await sendLog(
+        interaction.guild,
+        `Priority started from request ${request.id} by ${interaction.user.tag}.`,
+        true
+    );
+
+    return replyPrivate(interaction, "Priority scene started.");
+}
+
+async function announcePriorityStart(guild, request, user) {
+    const channel = channelById(guild, cfg.priorityAnnouncementChannel);
     if (!channel) return;
 
     await channel.send(makeV2(
         "Priority Scene Started",
         `A priority scene has been started at **${request.location}**.\n\n` +
         `**Scene:** ${request.scene}\n` +
-        `**Requested by:** <@${request.userId}>\n` +
-        `**Duration:** ${cfg.priorityDurationMinutes} minutes\n\n` +
-        "All units should follow server priority and roleplay procedures."
-    )).catch(console.error);
-}
-
-async function startPriorityRequest(interaction, request) {
-    if (!isPriorityStaff(interaction.member)) {
-        return replyPrivate(interaction, "Only authorized staff can start priority scenes.");
-    }
-
-    if (request.status !== "Approved") {
-        return replyPrivate(interaction, "This request must be approved before it can start.");
-    }
-
-    const active = priorities.get(interaction.guildId);
-
-    if (active) {
-        return replyPrivate(
-            interaction,
-            `Another priority is already active: ${active.scene} at ${active.location}.`
-        );
-    }
-
-    const nextApproved = [...priorityRequests.values()]
-        .filter(item =>
-            item.guildId === interaction.guildId &&
-            item.status === "Approved"
-        )
-        .sort((a, b) => a.approvedAt - b.approvedAt)[0];
-
-    if (nextApproved && nextApproved.id !== request.id) {
-        return replyPrivate(
-            interaction,
-            `Another request is ahead in the queue: ${nextApproved.scene} at ${nextApproved.location}.`
-        );
-    }
-
-    request.status = "Active";
-    request.startedAt = Date.now();
-
-    priorities.set(interaction.guildId, {
-        scene: request.scene,
-        location: request.location,
-        userId: interaction.user.id,
-        requesterId: request.userId,
-        requestId: request.id,
-        startedAt: Date.now()
-    });
-
-    if (cfg.voiceChannel) {
-        const voice = await client.channels.fetch(cfg.voiceChannel).catch(() => null);
-        if (voice && typeof voice.setStatus === "function") {
-            await voice.setStatus(`Priority: ${request.scene} - ${request.location}`)
-                .catch(error => console.error("Voice status update failed:", error.message));
-        }
-    }
-
-    await announcePriorityStart(interaction.guild, request);
-    await updatePriorityRequestMessage(request);
-
-    await dmPriorityUser(
-        request,
-        `Your priority scene is now starting at **${request.location}**. Please follow staff instructions.`
-    );
-
-    const announcement =
-        `Attention all units. A ${request.scene} priority scene has started at ${request.location}. ` +
-        "All units should approach with caution and follow staff instructions.";
-
-    speakInVoiceChannel(announcement).catch(error =>
-        console.error("[PRIORITY VOICE ANNOUNCEMENT FAILED]", error)
-    );
-
-    const timer = setTimeout(async () => {
-        try {
-            await endPriority(interaction.guild, client.user, true);
-        } catch (error) {
-            console.error("Automatic priority end failed:", error);
-        }
-    }, cfg.priorityDurationMinutes * 60 * 1000);
-
-    priorityTimers.set(interaction.guildId, timer);
-
-    await replyPrivate(
-        interaction,
-        `Priority scene started. It will automatically end in ${cfg.priorityDurationMinutes} minutes.`
-    );
+        `**Started by:** ${user}\n` +
+        `**Duration:** ${cfg.priorityDurationMinutes} minutes`,
+        { color: 0xE67E22, banner: cfg.priorityBanner }
+    ));
 
     await sendLog(
-        interaction.guild,
-        `Priority ${request.id} started by ${interaction.user.tag}: ${request.scene} at ${request.location}.`,
+        guild,
+        `Priority scene started: ${request.scene} at ${request.location}.`,
         true
     );
 }
 
 async function endPriority(guild, user, automatic = false) {
-    const previous = priorities.get(guild.id);
-    const timer = priorityTimers.get(guild.id);
+    if (!guild) return;
 
-    if (timer) clearTimeout(timer);
-    priorityTimers.delete(guild.id);
+    const previous = priorities.get(guild.id);
+    if (!previous) return;
+
     priorities.delete(guild.id);
 
-    if (previous?.requestId) {
-        const request = priorityRequests.get(previous.requestId);
-        if (request) {
-            request.status = "Completed";
-            request.completedAt = Date.now();
-            await updatePriorityRequestMessage(request);
-            await dmPriorityUser(
-                request,
-                `Your priority scene at **${request.location}** has ended. Thank you for coordinating with staff.`
-            );
-        }
-    }
+    const timer = priorityTimers.get(guild.id);
+    if (timer) clearTimeout(timer);
+    priorityTimers.delete(guild.id);
 
-    if (cfg.voiceChannel) {
-        const voice = await client.channels.fetch(cfg.voiceChannel).catch(() => null);
-        if (voice && typeof voice.setStatus === "function") {
-            await voice.setStatus("").catch(error =>
-                console.error("Could not clear voice status:", error.message)
-            );
-        }
-    }
+    const channel = channelById(guild, cfg.priorityAnnouncementChannel);
 
-    const announcementChannel =
-        channelById(guild, cfg.priorityAnnouncementChannel) ||
-        channelById(guild, cfg.priorityPanelChannel);
-
-    if (previous && announcementChannel) {
-        await announcementChannel.send(makeV2(
+    if (channel) {
+        await channel.send(makeV2(
             "Priority Scene Ended",
-            `The priority scene **${previous.scene}** at **${previous.location}** has ended.`
-        )).catch(() => {});
+            `The active priority scene has ended.\n\n` +
+            `**Scene:** ${previous.scene}\n` +
+            `**Location:** ${previous.location}\n` +
+            `**Ended by:** ${user}\n` +
+            `**Duration:** ${Math.floor((Date.now() - previous.startedAt) / 60000)} minutes\n` +
+            `**End type:** ${automatic ? "Automatic timer" : "Manual"}`
+        )).catch(console.error);
     }
 
     await sendLog(
@@ -2776,11 +2400,34 @@ process.on("uncaughtException", error => {
 
 (async () => {
     try {
+        console.log("----------------------------------------");
         console.log("Starting Texas Operations...");
-        await registerCommands();
+        console.log("----------------------------------------");
+
+        console.log("[DISCORD] Authenticating bot...");
         await client.login(cfg.token);
+        console.log("[DISCORD] Authentication successful.");
+        console.log(`[DISCORD] Logged in as ${client.user.tag}`);
+
+        console.log("[COMMANDS] Registering slash commands...");
+        await registerCommands();
+        console.log("[COMMANDS] Slash commands registered successfully.");
+
+        console.log("----------------------------------------");
+        console.log("Texas Operations started successfully.");
+        console.log("----------------------------------------");
     } catch (error) {
-        console.error("Failed to start Texas Operations:", error);
-        process.exitCode = 1;
+        console.error("----------------------------------------");
+        console.error("TEXAS OPERATIONS STARTUP FAILED");
+        console.error("----------------------------------------");
+
+        if (error?.status === 401 || error?.code === 0) {
+            console.error("[AUTHENTICATION] Discord rejected the bot token.");
+            console.error("Check DISCORD_TOKEN or BOT_TOKEN in your hosting environment.");
+            console.error("Use the Bot Token from Discord Developer Portal, not the Client Secret.");
+        } else {
+            console.error("[STARTUP ERROR]", error);
+        }
+        process.exit(1);
     }
 })();
